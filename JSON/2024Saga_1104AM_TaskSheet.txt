@@ -1,0 +1,89 @@
+{
+  "basicInfo": {
+    "date": "2024年11月4日（月）AM",
+    "launchPeriod": "0645 - 0800",
+    "taskOrder": "In Order",
+    "qnh": "1021hPa",
+    "sunriseSunset": "0645 / 1720",
+    "nextBriefing": "2025 Saga International Balloon Fiesta",
+    "launchReqmt": "Individual Launch. Min. ILP->Targets: 3km",
+    "generalNotes": "Please upload BLA data as soon as possible after landing."
+  },
+  "tasks": [
+    {
+      "type": "HWZ",
+      "typeName": "Hesitation Waltz",
+      "targetGPS": "0825/7380 (Blue target), 1013/7304 (Red target)",
+      "targetColor": "",
+      "markerColor": "White",
+      "markerDrop": "Free",
+      "mma": "MMA",
+      "loggerMarker": "1",
+      "scoringPeriodEnd": "08:20",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": "see attached sheets"
+    },
+    {
+      "type": "PDG",
+      "typeName": "Pilot Declared Goal",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "2",
+      "scoringPeriodEnd": "08:50",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "2",
+      "declarationMethod": "Before launch to the Logger goals #1 and #2",
+      "notes": "Any valid coordinates with altitudes. Min 4km / Max 6km from ILP. Min distances of goal from any goal set by the director: 1km."
+    },
+    {
+      "type": "FON",
+      "typeName": "Fly On",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "3",
+      "scoringPeriodEnd": "09:20",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "1",
+      "declarationMethod": "Before previous Loggermark at Logger goal #3",
+      "notes": "Any valid coordinates. Min 2km / Max 4km between previous mark and declared goal. Min distances of declared goal(s) from any goal set by the director: 1km."
+    },
+    {
+      "type": "HWZ",
+      "typeName": "Hesitation Waltz",
+      "targetGPS": "1650/8208 (Red target), 1927/7744 (White target)",
+      "targetColor": "",
+      "markerColor": "Pink",
+      "markerDrop": "Free",
+      "mma": "",
+      "loggerMarker": "4",
+      "scoringPeriodEnd": "09:40",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": "see attached sheets"
+    },
+    {
+      "type": "PDG",
+      "typeName": "Pilot Declared Goal",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "5",
+      "scoringPeriodEnd": "10:00",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "2",
+      "declarationMethod": "Before launch to the Logger goals #4 and #5",
+      "notes": "Any valid coordinates with altitudes. Min distances of goal from ILP: 12km. Min distances of goal from any goal set by the director: 1km."
+    }
+  ]
+}

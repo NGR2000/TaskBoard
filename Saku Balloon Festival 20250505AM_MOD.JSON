@@ -1,0 +1,79 @@
+{
+  "basicInfo": {
+    "CompetitionName": "Saku Balloon Festival 2025",
+    "date": "2025年5月5日（月）AM 0515",
+    "launchPeriod": "0600 - 0645",
+    "taskOrder": "In Order",
+    "qnh": "1014hPa",
+    "sunriseSunset": "0455 / 1815",
+    "nextBriefing": "10th Oct, at Ichinoseki",
+    "launchReqmt": "ILA (Min. distance ILP to all goals/targets set by Director: 1.5km)",
+    "generalNotes": "Task 1 PDG Goals must be at least 500m from all Targets. Task 1 PDG may be flown in any order."
+  },
+  "tasks": [
+    {
+      "TaskNo":"01",
+      "type": "PDG",
+      "typeName": "Pilot Declared Goal",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "Log Mark 1",
+      "scoringPeriodEnd": "08:30",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "2",
+      "declarationMethod": "Log Goal 1 and 2, Before take off",
+      "notes": "Any map coordinate (4/4 format) with Altitude. Min. 1km, max. 8km from ILP."
+    },
+    {
+      "TaskNo":"02",
+      "type": "FIN",
+      "typeName": "Fly In",
+      "targetGPS": "6956 1478",
+      "targetColor": "red",
+      "markerColor": "Blue",
+      "markerDrop": "Free",
+      "mma": "R 60m",
+      "loggerMarker": "Log Mark 2",
+      "scoringPeriodEnd": "08:00",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": ""
+    },
+    {
+      "TaskNo":"03",
+      "type": "JDG",
+      "typeName": "Judge Declared Goal",
+      "targetGPS": "7073 1415",
+      "targetColor": "white",
+      "markerColor": "Yellow",
+      "markerDrop": "GMD",
+      "mma": "R 80m",
+      "loggerMarker": "Log Mark 3",
+      "scoringPeriodEnd": "08:15",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": ""
+    },
+    {
+      "TaskNo":"04",
+      "type": "JDG",
+      "typeName": "Judge Declared Goal",
+      "targetGPS": "7393 1201",
+      "targetColor": "yellow",
+      "markerColor": "Orange",
+      "markerDrop": "Free",
+      "mma": "R 60m",
+      "loggerMarker": "Log Mark 4",
+      "scoringPeriodEnd": "08:30",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": ""
+    }
+  ]
+}

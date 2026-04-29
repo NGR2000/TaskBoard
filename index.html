@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎈 TaskBoard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Sans','Yu Gothic',sans-serif; background:#fff; color:#222; }
+.header { background:#1a1a1a; color:#fff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+.header span { font-size:16px; font-weight:bold; }
+.btn { padding:12px 20px; border-radius:8px; border:none; font-size:15px; font-weight:bold; cursor:pointer; width:100%; margin-bottom:10px; }
+.btn-primary { background:#1a1a1a; color:#fff; }
+.btn-secondary { background:#eee; color:#222; }
+.btn-small { background:#444; color:#fff; padding:6px 12px; border-radius:6px; border:none; font-size:13px; cursor:pointer; width:auto; margin:0; }
+.card { border:2px solid #222; border-radius:12px; margin-bottom:12px; overflow:hidden; }
+.card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:#f8f8f8; cursor:pointer; user-select:none; }
+.card-body { padding:4px 16px 16px; }
+.row { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; border-bottom:1px solid #eee; }
+.row-label { font-size:14px; color:#666; flex-shrink:0; margin-right:8px; }
+.row-value { font-size:16px; font-weight:bold; text-align:right; }
+.gmd-alert { background:#fff0f0; border:2px solid #cc0000; border-radius:8px; padding:10px 14px; margin:12px 0; color:#cc0000; font-weight:bold; font-size:15px; line-height:1.5; }
+.timer-box { margin-top:12px; padding:12px 14px; background:#f0f0f0; border-radius:8px; }
+.timer-display { font-family:monospace; font-size:22px; font-weight:bold; color:#fff; padding:8px 14px; border-radius:8px; display:inline-block; margin-top:6px; }
+.notes { margin-top:10px; padding:8px 12px; background:#fffbe0; border:1px solid #cc9900; border-radius:8px; font-size:14px; color:#554400; line-height:1.6; }
+.wrap { padding:16px; max-width:600px; margin:0 auto; }
+.loading { display:flex; align-items:center; justify-content:center; height:80vh; font-size:16px; color:#666; }
+textarea { width:100%; height:140px; padding:12px; border-radius:8px; border:2px solid #ccc; font-size:12px; font-family:monospace; resize:vertical; outline:none; }
+.error { padding:14px; background:#fff0f0; border:2px solid #cc0000; border-radius:8px; color:#cc0000; font-size:13px; margin-top:8px; white-space:pre-wrap; }
+.info { padding:10px 12px; background:#f0f4ff; border-radius:8px; font-size:13px; color:#333; line-height:1.7; margin-bottom:12px; }
+.updated { font-size:12px; color:#888; text-align:right; margin-bottom:8px; }
+img { width:100%; display:block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="loading">読み込み中...</div>
+</div>
+<script>
+const COLORS = {
+  red:    { text:"#cc0000", label:"赤" },
+  blue:   { text:"#0033cc", label:"青" },
+  yellow: { text:"#997700", label:"黄" },
+  orange: { text:"#cc5500", label:"橙" },
+  white:  { text:"#333333", label:"白" },
+  green:  { text:"#006600", label:"緑" },
+  black:  { text:"#000000", label:"黒" },
+  pink:   { text:"#cc0066", label:"桃" },
+};
+
+function getColor(name) {
+  if (!name) return COLORS.black;
+  const k = name.toLowerCase();
+  for (const [key,v] of Object.entries(COLORS)) if (k.includes(key)) return v;
+  return COLORS.black;
+}
+
+let state = {
+  screen: "loading",
+  data: null,
+  image: null,
+  updatedAt: null,
+  open: {}
+};
+let timers = [];
+
+function render() {
+  const app = document.getElementById("app");
+  timers.forEach(clearInterval); timers = [];
+
+  if (state.screen === "loading") {
+    app.innerHTML = '<div class="loading">読み込み中...</div>';
+    return;
+  }
+
+  if (state.screen === "home") {
+    app.innerHTML = `
+      <div class="header"><span>🎈 TaskBoard</span><span></span></div>
+      <div class="wrap">
+        <div style="font-size:26px;font-weight:bold;margin-bottom:6px">熱気球競技<br>タスク管理</div>
+        <div style="font-size:13px;color:#888;margin-bottom:28px">FAI / CIA ルール対応</div>
+        <button class="btn btn-primary" onclick="showScreen('upload')">📋 タスクシートを読み込む</button>
+        <div style="margin-top:16px;padding:16px;background:#f8f8f8;border-radius:8px;font-size:13px;color:#555;line-height:1.8">
+          <div style="font-weight:bold;margin-bottom:4px">使い方</div>
+          <div>1. Claudeでタスクシート画像を送る</div>
+          <div>2.「TaskBoard用JSONに変換して」と依頼</div>
+          <div>3. JSONをコピーしてこのアプリに貼り付ける</div>
+          <div>4. このURLをLINEでクルーに共有</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (state.screen === "upload") {
+    app.innerHTML = `
+      <div class="header">
+        <button class="btn-small" onclick="showScreen(state.data?'view':'home')">← 戻る</button>
+        <span>タスクシート読み込み</span><span></span>
+      </div>
+      <div class="wrap">
+        <div style="font-size:15px;font-weight:bold;margin-bottom:6px">📋 JSONを貼り付けて読み込む</div>
+        <div class="info">Claudeのチャットでタスクシート画像を送り<br>「<strong>TaskBoard用JSONに変換して</strong>」と依頼してください</div>
+        <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="loadJson()">JSONを読み込む</button>
+        <div style="display:flex;align-items:center;gap:8px;margin:16px 0">
+          <div style="flex:1;height:1px;background:#ddd"></div>
+          <span style="font-size:12px;color:#999">または</span>
+          <div style="flex:1;height:1px;background:#ddd"></div>
+        </div>
+        <div style="font-size:15px;font-weight:bold;margin-bottom:8px">🖼 原本画像を保存する</div>
+        <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
+        <button class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">
+          ${state.image ? '✅ 原本（保存済）' : '📂 原本画像を選択して保存'}
+        </button>
+        <div id="imageStatus" style="font-size:13px;color:#006600;margin-top:4px"></div>
+        <div id="uploadError"></div>
+      </div>`;
+    return;
+  }
+
+  if (state.screen === "image") {
+    app.innerHTML = `
+      <div class="header">
+        <button class="btn-small" onclick="showScreen('view')">← 戻る</button>
+        <span>原本タスクシート</span><span></span>
+      </div>
+      <div style="padding:8px">
+        ${state.image ? `<img src="${state.image}" alt="タスクシート原本">` : '<div class="loading">画像がありません</div>'}
+      </div>`;
+    return;
+  }
+
+  if (state.screen === "view" && state.data) {
+    const d = state.data;
+    let html = `
+      <div class="header">
+        <span>🎈 TaskBoard</span>
+        <div style="display:flex;gap:8px">
+          ${state.image ? '<button class="btn-small" onclick="showScreen(\'image\')">原本</button>' : ""}
+          <button class="btn-small" onclick="showScreen('upload')">📋 入力</button>
+          <button class="btn-small" onclick="loadData()">↻ 同期</button>
+        </div>
+      </div>
+      <div class="wrap">
+        ${state.updatedAt ? `<div class="updated">最終更新: ${new Date(state.updatedAt).toLocaleString("ja-JP")}</div>` : ""}
+        ${renderBasicInfo(d.basicInfo)}
+        ${(d.tasks||[]).map((t,i) => renderTask(t,i)).join("")}
+        <div style="margin-top:32px;padding-top:16px;border-top:1px solid #ddd;text-align:center">
+          <button onclick="resetData()" style="background:none;border:1px solid #ccc;color:#aaa;padding:8px 20px;border-radius:6px;font-size:12px;cursor:pointer">データをリセット</button>
+        </div>
+        <div style="height:32px"></div>
+      </div>`;
+    app.innerHTML = html;
+    startTimers(d.tasks||[]);
+    return;
+  }
+
+  showScreen("home");
+}
+
+function renderBasicInfo(info) {
+  if (!info) return "";
+  const isOpen = state.open["basic"];
+  const rows = [
+    ["大会", info.CompetitionName], ["日付", info.date], ["離陸時間", info.launchPeriod], ["タスク順", info.taskOrder],
+    ["QNH", info.qnh], ["日の出/日の入", info.sunriseSunset], ["次回ブリーフィング", info.nextBriefing]
+  ].filter(([,v])=>v);
+  return `
+    <div class="card">
+      <div class="card-header" onclick="toggleOpen('basic')">
+        <span style="font-size:15px;font-weight:bold">📋 基本情報  ${info.date}</span>
+        <span style="font-size:18px;color:#888">${isOpen?"▲":"▼"}</span>
+      </div>
+      ${isOpen ? `<div class="card-body">
+        ${rows.map(([l,v])=>`<div class="row"><span class="row-label">${l}</span><span class="row-value">${v}</span></div>`).join("")}
+        ${info.launchReqmt?`<div style="padding:7px 0;border-bottom:1px solid #eee"><div style="font-size:14px;color:#666;margin-bottom:3px">Launch Reqmt</div><div style="font-size:14px;font-weight:bold">${info.launchReqmt}</div></div>`:""}
+        ${info.generalNotes?`<div class="notes">📝 ${info.generalNotes}</div>`:""}
+      </div>` : ""}
+    </div>`;
+}
+
+function renderTask(task, index) {
+  const isOpen = state.open["task"+index] !== false;
+  const isGMD = task.markerDrop?.toUpperCase().includes("GMD");
+  const mc = getColor(task.markerColor);
+  const tc = getColor(task.targetColor);
+  return `
+    <div class="card" style="${isGMD?"border:3px solid #cc0000":""}">
+      <div class="card-header" style="${isGMD?"background:#fff0f0":""}" onclick="toggleOpen('task${index}')">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="background:#222;color:#fff;border-radius:6px;padding:3px 10px;font-size:15px;font-weight:bold">${index+1} Task#${task.TaskNo}</span>
+          <span style="font-size:16px;font-weight:bold;color:${isGMD?"#cc0000":"#222"}">${task.type}</span>
+          <span style="font-size:14px;color:#555">${task.typeName||""}</span>
+          ${isGMD?'<span style="font-size:14px;font-weight:bold;color:#cc0000">🚨GMD</span>':""}
+        </div>
+        <span style="font-size:18px;color:#888;flex-shrink:0">${isOpen?"▲":"▼"}</span>
+      </div>
+      ${isOpen ? `<div class="card-body">
+        ${isGMD?'<div class="gmd-alert">🚨 GMD（重力落下）― 投げると距離ペナルティ！<br>両足をゴンドラに付けて落下させること</div>':""}
+        ${task.numberOfGoals?`<div class="row"><span class="row-label">宣言ゴール数</span><span class="row-value">${task.numberOfGoals} 個</span></div>`:""}
+        ${task.declarationMethod?`<div class="row"><span class="row-label">宣言方法</span><span class="row-value">${task.declarationMethod}</span></div>`:""}
+        ${task.markerColor?`<div class="row"><span class="row-label">マーカー色</span><span class="row-value" style="color:${mc.text}">● ${mc.label}（${task.markerColor}）</span></div>`:""}
+        ${task.targetColor?`<div class="row"><span class="row-label">ターゲット色</span><span class="row-value" style="color:${tc.text}">◎ ${tc.label}（${task.targetColor}）</span></div>`:""}
+        ${task.markerDrop?`<div class="row"><span class="row-label">マーカードロップ</span><span class="row-value" style="color:${isGMD?"#cc0000":"#222"};font-weight:${isGMD?"bold":"normal"}">${task.markerDrop}</span></div>`:""}
+        ${task.mma?`<div class="row"><span class="row-label">MMA</span><span class="row-value">${task.mma}</span></div>`:""}
+        ${task.loggerMarker?`<div class="row"><span class="row-label">ロガーマーカー</span><span class="row-value">📍 ${task.loggerMarker}</span></div>`:""}
+        ${task.targetGPS?`<div class="row"><span class="row-label">設定されたゴール／ターゲットの位置</span><span class="row-value">${task.targetGPS}</span></div>`:""}
+        ${task.scoringArea?`<div class="row"><span class="row-label">スコアリングエリア</span><span class="row-value">${task.scoringArea}</span></div>`:""}
+        ${task.scoringPeriodEnd?`
+          <div class="timer-box">
+            <div style="font-size:13px;color:#555;margin-bottom:4px">スコアリングピリオド終了</div>
+            <div style="font-size:24px;font-weight:bold;color:#222">🏁 ${task.scoringPeriodEnd}</div>
+            <div id="timer${index}" class="timer-display" style="background:#1a1a1a">--:--</div>
+          </div>`:""}
+        ${task.notes?`<div class="notes">📝 ${task.notes}</div>`:""}
+      </div>` : ""}
+    </div>`;
+}
+
+function startTimers(tasks) {
+  tasks.forEach((task, index) => {
+    if (!task.scoringPeriodEnd) return;
+    const el = document.getElementById("timer"+index);
+    if (!el) return;
+    const update = () => {
+      const now = new Date();
+      const [h,m] = task.scoringPeriodEnd.split(":").map(Number);
+      const end = new Date(now); end.setHours(h,m,0,0);
+      if (now >= end) {
+        el.textContent = "✅ スコアリングピリオド終了";
+        el.style.background = "#555";
+        el.style.fontSize = "15px";
+        el.style.letterSpacing = "0";
+        return;
+      }
+      const diff = Math.floor((end-now)/1000);
+      const hh=Math.floor(diff/3600), mm=Math.floor((diff%3600)/60), ss=diff%60;
+      const isW=diff<=900, isD=diff<=300;
+      el.textContent = (isD?"🚨":isW?"⚠️":"⏱")+" "+(hh>0?hh+":":"")+String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+      el.style.background = isD?"#cc0000":isW?"#ff8800":"#1a1a1a";
+      el.style.fontSize = "22px";
+      el.style.letterSpacing = "2px";
+    };
+    update();
+    timers.push(setInterval(update, 1000));
+  });
+}
+
+function toggleOpen(key) {
+  state.open[key] = key === "basic" ? !state.open[key] : (state.open[key] === false ? true : false);
+  render();
+}
+
+function showScreen(screen) { state.screen = screen; render(); }
+
+function loadJson() {
+  const input = document.getElementById("jsonInput").value;
+  const errEl = document.getElementById("uploadError");
+  try {
+    const m = input.replace(/```json|```/g,"").trim().match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("JSONの形式が正しくありません");
+    const parsed = JSON.parse(m[0]);
+    if (!parsed.tasks) throw new Error("tasksが見つかりません");
+    errEl.innerHTML = '<div class="info">保存中...</div>';
+    google.script.run
+      .withSuccessHandler(() => { state.data = parsed; state.screen = "view"; render(); })
+      .withFailureHandler((e) => { errEl.innerHTML = `<div class="error">保存に失敗: ${e.message}</div>`; })
+      .saveTaskData(JSON.stringify(parsed));
+  } catch(e) { errEl.innerHTML = `<div class="error">エラー: ${e.message}</div>`; }
+}
+
+function loadData() {
+  state.screen = "loading"; render();
+  google.script.run
+    .withSuccessHandler((result) => {
+      try {
+        if (result && result.data) {
+          state.data = JSON.parse(result.data);
+          state.updatedAt = result.updatedAt;
+          state.image = result.image || null;
+          state.screen = "view";
+        } else {
+          state.screen = "home";
+        }
+      } catch(e) { state.screen = "home"; }
+      render();
+    })
+    .withFailureHandler((e) => {
+      alert("読み込みエラー: " + e.message);
+      state.screen = "home"; render();
+    })
+    .getTaskData();
+}
+
+function compressImage(file, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+      canvas.width = Math.floor(img.width * scale);
+      canvas.height = Math.floor(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      callback(canvas.toDataURL("image/jpeg", 0.7));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function uploadImage(input) {
+  const file = input.files[0]; if (!file) return;
+  const statusEl = document.getElementById("imageStatus");
+  statusEl.textContent = "圧縮中...";
+  compressImage(file, (compressed) => {
+    statusEl.textContent = "保存中...";
+    google.script.run
+      .withSuccessHandler(() => { state.image = compressed; statusEl.textContent = "✅ 原本画像を保存しました"; render(); })
+      .withFailureHandler((e) => { statusEl.textContent = "❌ 保存失敗: " + e.message; })
+      .saveImageData(compressed);
+  });
+}
+
+function resetData() {
+  if (!confirm("本当にリセットしますか？\n競技中は操作しないでください。")) return;
+  if (!confirm("最終確認：リセットを実行しますか？")) return;
+  google.script.run
+    .withSuccessHandler(() => { state.data = null; state.image = null; state.screen = "home"; render(); })
+    .withFailureHandler((e) => { alert("リセット失敗: " + e.message); })
+    .resetTaskData();
+}
+
+window.onload = () => loadData();
+</script>
+</body>
+</html>

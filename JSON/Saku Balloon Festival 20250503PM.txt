@@ -1,0 +1,44 @@
+{
+  "basicInfo": {
+    "date": "2024年5月3日（金）PM",
+    "launchPeriod": "Green Flag + 30 min.",
+    "taskOrder": "in Any Order",
+    "qnh": "1014hPa",
+    "sunriseSunset": "0455 / 1815",
+    "nextBriefing": "0515, at Kishino Kaikan",
+    "launchReqmt": "Common Launch Area. CLP: 6928-1467",
+    "generalNotes": ""
+  },
+  "tasks": [
+    {
+      "type": "HWZ",
+      "typeName": "Hesitation Waltz",
+      "targetGPS": "7192 1390 (red target) MMA R90m, 7186 1227 (white target) MMA R70m",
+      "targetColor": "",
+      "markerColor": "Blue",
+      "markerDrop": "Free",
+      "mma": "R90m / R70m（ターゲットごと）",
+      "loggerMarker": "Log Mark 1",
+      "scoringPeriodEnd": "18:15",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": ""
+    },
+    {
+      "type": "LRN",
+      "typeName": "Land Run",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "LogMark 2,3,4",
+      "scoringPeriodEnd": "18:15",
+      "scoringArea": "See the List of SCA",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": "Point A: Log Mark 2, Point B: Log Mark 3, Point C: Log Mark 4. See the List of SCA."
+    }
+  ]
+}

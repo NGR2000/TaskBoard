@@ -1,0 +1,44 @@
+{
+  "basicInfo": {
+    "date": "2024年5月5日（日）AM",
+    "launchPeriod": "Green Flag + 30 min.",
+    "taskOrder": "in Any Order",
+    "qnh": "1022hPa",
+    "sunriseSunset": "0455 / 1815",
+    "nextBriefing": "11th Oct, at Ichinoseki",
+    "launchReqmt": "Common Launch Area. CLP: 6928-1467",
+    "generalNotes": "Task 10 PDG Goals must be at least 500m from Task #9 HWZ Targets."
+  },
+  "tasks": [
+    {
+      "type": "HWZ",
+      "typeName": "Hesitation Waltz",
+      "targetGPS": "6816 1616 (red target) MMA R100m, 6999 1625 (white target) MMA R100m",
+      "targetColor": "",
+      "markerColor": "Light Green",
+      "markerDrop": "GMD",
+      "mma": "R 100m（各ターゲット）",
+      "loggerMarker": "Log Mark 1",
+      "scoringPeriodEnd": "08:00",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "",
+      "declarationMethod": "",
+      "notes": ""
+    },
+    {
+      "type": "PDG",
+      "typeName": "Pilot Declared Goal",
+      "targetGPS": "",
+      "targetColor": "",
+      "markerColor": "",
+      "markerDrop": "MMA",
+      "mma": "",
+      "loggerMarker": "Log Mark 2",
+      "scoringPeriodEnd": "08:00",
+      "scoringArea": "Entire Contest Area",
+      "numberOfGoals": "2",
+      "declarationMethod": "Log Goal 1 and 2, Before take off",
+      "notes": "Any map coordinate (4/4 format) with Altitude. Min. 1km, max. 4km from CLP."
+    }
+  ]
+}
