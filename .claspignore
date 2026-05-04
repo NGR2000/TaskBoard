@@ -1,0 +1,10 @@
+DepVer039_index.html
+DepVer039_コード.js
+*.txt
+*.JPG
+*.jpg
+*.JSON
+*.md
+JSON/
+.claude/
+memory/

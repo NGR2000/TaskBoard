@@ -72,7 +72,7 @@ function render() {
   timers.forEach(clearInterval); timers = [];
 
   if (state.screen === "loading") {
-    app.innerHTML = '<div class="loading">読み込み中...</div>';
+    app.innerHTML = '<div class="loading">読み込み中... v3</div>';
     return;
   }
 
@@ -103,7 +103,7 @@ function render() {
       <div class="wrap">
         <div style="font-size:15px;font-weight:bold;margin-bottom:6px">📋 JSONを貼り付けて読み込む</div>
         <div class="info">Claudeのチャットでタスクシート画像を送り<br>「<strong>TaskBoard用JSONに変換して</strong>」と依頼してください</div>
-        <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[]}'></textarea>
+        <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
         <button class="btn btn-primary" style="margin-top:8px" onclick="loadJson()">JSONを読み込む</button>
         <div style="display:flex;align-items:center;gap:8px;margin:16px 0">
           <div style="flex:1;height:1px;background:#ddd"></div>
@@ -116,22 +116,7 @@ function render() {
           ${state.image ? '✅ 原本（保存済）' : '📂 原本画像を選択して保存'}
         </button>
         <div id="imageStatus" style="font-size:13px;color:#006600;margin-top:4px"></div>
-        ${state.data ? `
-        <div style="margin-top:20px">
-          <div style="font-size:15px;font-weight:bold;margin-bottom:8px">📎 スケッチを管理する</div>
-          ${(state.data.tasks||[]).map(task => `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
-              <span style="font-size:14px">${state.sketchMap[task.TaskNo] ? '✅' : '📂'} Task#${task.TaskNo} ${task.type||''}</span>
-              <div style="display:flex;gap:6px;align-items:center">
-                ${state.sketchMap[task.TaskNo]
-                  ? `<button class="btn-small" onclick="showSketch('${task.TaskNo}')">見る</button><button onclick="deleteSketch('${task.TaskNo}')" style="color:#cc0000;background:none;border:1px solid #cc0000;padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer">削除</button>`
-                  : `<input type="file" id="sketchInput_${task.TaskNo}" accept="image/*" style="display:none" onchange="uploadSketch(this,'${task.TaskNo}')"><button class="btn-small" onclick="document.getElementById('sketchInput_${task.TaskNo}').click()">追加</button>`
-                }
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        ` : ''}
+        ${renderSketchManager()}
         <div id="uploadError"></div>
       </div>`;
     return;
@@ -169,7 +154,7 @@ function render() {
       <div class="header">
         <span>🎈 TaskBoard</span>
         <div style="display:flex;gap:8px">
-          ${state.image ? '<button class="btn-small" onclick="showScreen(\'image\')">原本</button>' : ""}
+          ${state.image ? `<button class="btn-small" onclick="showScreen('image')">原本</button>` : ""}
           <button class="btn-small" onclick="showScreen('upload')">📋 入力</button>
           <button class="btn-small" onclick="loadData()">↻ 同期</button>
         </div>
@@ -247,10 +232,7 @@ function renderTask(task, index) {
           </div>`:""}
         ${task.notes?`<div class="notes">📝 ${task.notes}</div>`:""}
         <div style="border-top:1px solid #eee;margin-top:8px;padding-top:8px">
-          ${state.sketchMap[task.TaskNo]
-            ? `<div style="background:#f8f8f8;border-radius:6px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:14px">📎 スケッチ</span><button class="btn-small" onclick="showSketch('${task.TaskNo}')">見る</button></div>`
-            : `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0"><span style="color:#aaa;font-size:13px">📎 スケッチなし</span><button onclick="showScreen('upload')" style="background:none;border:none;color:#0066cc;font-size:13px;cursor:pointer;padding:0">追加</button></div>`
-          }
+          ${renderTaskSketch(task.TaskNo)}
         </div>
       </div>` : ""}
     </div>`;
@@ -285,6 +267,39 @@ function startTimers(tasks) {
   });
 }
 
+function renderSketchManager() {
+  if (!state.data) return '';
+  var q = "'";
+  var html = '<div style="margin-top:20px"><div style="font-size:15px;font-weight:bold;margin-bottom:8px">📎 スケッチを管理する</div>';
+  (state.data.tasks || []).forEach(function(task) {
+    var no = task.TaskNo;
+    var has = state.sketchMap[no];
+    var icon = has ? '✅' : '📂';
+    var btns = has
+      ? '<button class="btn-small" onclick="showSketch(' + q + no + q + ')">見る</button>' +
+        '<button onclick="deleteSketch(' + q + no + q + ')" style="color:#cc0000;background:none;border:1px solid #cc0000;padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer">削除</button>'
+      : '<input type="file" id="sketchInput_' + no + '" accept="image/*" style="display:none" onchange="uploadSketch(this,' + q + no + q + ')">' +
+        '<button class="btn-small" onclick="document.getElementById(' + q + 'sketchInput_' + no + q + ').click()">追加</button>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">' +
+      '<span style="font-size:14px">' + icon + ' Task#' + no + ' ' + (task.type || '') + '</span>' +
+      '<div style="display:flex;gap:6px;align-items:center">' + btns + '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderTaskSketch(taskNo) {
+  var q = "'";
+  if (state.sketchMap[taskNo]) {
+    return '<div style="background:#f8f8f8;border-radius:6px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between">' +
+      '<span style="font-size:14px">📎 スケッチ</span>' +
+      '<button class="btn-small" onclick="showSketch(' + q + taskNo + q + ')">見る</button></div>';
+  }
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
+    '<span style="color:#aaa;font-size:13px">📎 スケッチなし</span>' +
+    '<button onclick="showScreen(' + q + 'upload' + q + ')" style="background:none;border:none;color:#0066cc;font-size:13px;cursor:pointer;padding:0">追加</button></div>';
+}
+
 function toggleOpen(key) {
   state.open[key] = key === "basic" ? !state.open[key] : (state.open[key] === false ? true : false);
   render();
@@ -296,7 +311,7 @@ function loadJson() {
   const input = document.getElementById("jsonInput").value;
   const errEl = document.getElementById("uploadError");
   try {
-    const m = input.replace(/```json|```/g,"").trim().match(/\{[\s\S]*\}/);
+    const m = input.replace(/`{3}json|`{3}/g,"").trim().match(/\{[\s\S]*\}/);
     if (!m) throw new Error("JSONの形式が正しくありません");
     const parsed = JSON.parse(m[0]);
     if (!parsed.tasks) throw new Error("tasksが見つかりません");
