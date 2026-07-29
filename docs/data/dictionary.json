@@ -27,6 +27,7 @@
     { "ja": "オブザーバー", "en": "Observer", "keys": ["observer", "observers"] },
 
     { "ja": "タスク番号", "en": "Task No", "keys": ["task", "taskno", "tasknumber", "taskn"] },
+    { "ja": "対象タスク", "en": "Tasks", "keys": ["tasks"] },
     { "ja": "ルール番号", "en": "Rule No", "keys": ["rule", "ruleno", "rulenumber"] },
     { "ja": "タスク名", "en": "Task Name", "keys": ["taskname", "nameoftask"] },
     { "ja": "タスクデータ", "en": "Task Data", "keys": ["taskdata"] },
@@ -63,7 +64,7 @@
     { "ja": "最小／最大距離", "en": "Min / Max Distance", "keys": ["minmaxdistance", "minimumandmaximumdistance", "minmax", "minmaxdist"] },
     { "ja": "ILPからの最小／最大距離", "en": "Min / Max Distance from ILP", "keys": ["minmaxdistancefromilp", "distancefromilp", "mindistancefromilp", "maxdistancefromilp", "minilpallgoals", "minilptoallgoals"] },
     { "ja": "CLPからの最小／最大距離", "en": "Min / Max Distance from CLP", "keys": ["minmaxdistancefromclp", "distancefromclp", "mindistancefromclp", "maxdistancefromclp"] },
-    { "ja": "設定ゴールからの最小距離", "en": "Min Distance from Set Goals", "keys": ["mindistancefromsetgoals", "minimumdistancefromgoalssetbythedirector", "distancefromsetgoals", "mindistancefromdirectorgoals"] },
+    { "ja": "設定ゴールからの最小距離", "en": "Min Distance from Set Goals", "keys": ["mindistancefromsetgoals", "minimumdistancefromgoalssetbythedirector", "distancefromsetgoals", "mindistancefromdirectorgoals", "minimumandmaximumdistancesofdeclaredgoalsfromanygoalsetbythedirector", "distancesofdeclaredgoalsfromanygoalsetbythedirector"] },
     { "ja": "前のマークからの最小／最大距離", "en": "Min / Max Distance from Previous Mark", "keys": ["minmaxdistancefrompreviousmark", "distancefrompreviousmark", "mindistancefrompreviousmark", "maxdistancefrompreviousmark"] },
     { "ja": "ゴール間の最小距離", "en": "Min Distance Between Goals", "keys": ["mindistancebetweengoals", "minimumdistancebetweengoals"] },
 
@@ -74,9 +75,13 @@
     { "ja": "基準点", "en": "Reference Point", "keys": ["referencepoint", "refpoint", "reference"] },
     { "ja": "設定方向", "en": "Set Direction", "keys": ["setdirection", "direction"] },
     { "ja": "トラックポイント", "en": "Track Point", "keys": ["trackpoint", "trackpoints"] },
-    { "ja": "点A", "en": "Point A", "keys": ["pointa", "a"] },
-    { "ja": "点B", "en": "Point B", "keys": ["pointb", "b"] },
-    { "ja": "点C", "en": "Point C", "keys": ["pointc", "c"] },
+    { "ja": "点A", "en": "Point A", "keys": ["pointa"] },
+    { "ja": "点B", "en": "Point B", "keys": ["pointb"] },
+    { "ja": "点C", "en": "Point C", "keys": ["pointc"] },
+    { "ja": "点「A」の位置", "en": "Location of Point A", "keys": ["locationofpointa", "positionofpointa"] },
+    { "ja": "点「B」の決定方法", "en": "Method of Determining Point B", "keys": ["methodofdeterminingpointb"] },
+    { "ja": "点「C」の決定方法", "en": "Method of Determining Point C", "keys": ["methodofdeterminingpointc"] },
+    { "ja": "設定された空域の説明", "en": "Description of Set Airspace(s)", "keys": ["descriptionofsetairspace", "descriptionofsetairspaces", "descriptionofairspace", "descriptionofairspaces"] },
 
     { "ja": "ヘア気球", "en": "Hare Balloon", "keys": ["hare", "hareballoon", "descriptionofhareballoon"] },
     { "ja": "ヘアの離陸地点", "en": "Hare Launch Point", "keys": ["harelaunchpoint", "positionofharelaunchpoint", "locationofthelaunchpointofthehareballoon", "locationofthelaunchpointofthehare", "locationoflaunchpointofhare"] },

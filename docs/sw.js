@@ -7,7 +7,7 @@
  *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v2.0.1';
+var CACHE_VERSION = 'taskboard-v2.0.2';
 var SHELL = [
   './',
   './index.html',

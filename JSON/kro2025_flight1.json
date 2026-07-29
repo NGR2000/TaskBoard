@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 2,
+  "_source": "実物のタスクデータシート（XXV Krosno IMBC, Pre Worlds 2025, Flight 1, Tasks #1-#5）をそのまま起こしたもの。",
+  "basicInfo": {
+    "competitionName": "XXV Górskie Zawody Balonowe Krosno 2025 (Pre Worlds)",
+    "date": "01.05.2025 AM",
+    "fields": [
+      { "label": "Flight", "value": "1" },
+      { "label": "Tasks", "value": "#1, #2, #3, #4, #5" },
+      { "label": "Launch area", "value": "Individual launch" },
+      { "label": "Launch period", "value": "05:10 - 06:00" },
+      { "label": "PZs in force", "value": "all active" },
+      { "label": "Solo flight", "value": "not required" },
+      { "label": "Sunrise/Sunset", "value": "05:10 / 19:50" },
+      { "label": "Min. ILP → all goals", "value": "2km" },
+      { "label": "Next briefing", "value": "01.05.2025 16:30" },
+      { "label": "QNH", "value": "1021" }
+    ]
+  },
+  "tasks": [
+    {
+      "taskNo": "1",
+      "taskId": "FIN",
+      "ruleNo": "15.4",
+      "markerColor": "any",
+      "markerDrop": "gravity",
+      "scoringPeriodEnd": "0730",
+      "scoringArea": "entire contest area",
+      "targets": [
+        { "name": "284", "coordinates": "5056/0617", "altitude": "893ft", "mma": "R30m" }
+      ],
+      "fields": [
+        { "label": "Task order", "value": "in any order" }
+      ],
+      "loggerMarker": "1"
+    },
+    {
+      "taskNo": "2",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "markerColor": "any",
+      "markerDrop": "gravity",
+      "mma": "R20m",
+      "scoringPeriodEnd": "0730",
+      "scoringArea": "entire contest area",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Position of various set goals/targets", "value": "3 targets within 100m of CLP1 - 5313/0376 - 920ft" }
+      ],
+      "loggerMarker": "2"
+    },
+    {
+      "taskNo": "3",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "markerColor": "any",
+      "markerDrop": "gravity",
+      "scoringPeriodEnd": "0730",
+      "scoringArea": "entire contest area",
+      "targets": [
+        { "name": "326", "coordinates": "5518/0316", "altitude": "874ft", "mma": "R30m" },
+        { "name": "354", "coordinates": "5911/0116", "altitude": "965ft", "mma": "R30m" }
+      ],
+      "fields": [
+        { "label": "Task order", "value": "in any order" }
+      ],
+      "loggerMarker": "3"
+    },
+    {
+      "taskNo": "4",
+      "taskId": "LRN",
+      "ruleNo": "15.12",
+      "scoringPeriodEnd": "0800",
+      "scoringArea": "entire contest area",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Location of point \"A\"", "value": "Loggermarker #4" },
+        { "label": "Method of determining point \"B\"", "value": "Loggermarker #5, after point A and before point C" },
+        { "label": "Method of determining point \"C\"", "value": "Loggermarker #6, latest 30 minutes after point A" },
+        { "label": "Description of scoring area(s)", "value": "entire contest area" }
+      ],
+      "loggerMarker": "4, 5, 6"
+    },
+    {
+      "taskNo": "5",
+      "taskId": "FON",
+      "ruleNo": "15.5",
+      "scoringPeriodEnd": "0800",
+      "scoringArea": "entire contest area",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Method of declaration", "value": "in loggergoal #1, max. 3 valid declarations" },
+        { "label": "Number of goals permitted", "value": "1" },
+        { "label": "Goals available for declaration", "value": "any coordinate (no goal number) with altitude: goal altitude must be at least 1000ft higher than declaration point" },
+        { "label": "minimum and maximum distance between declaration point and declared goal(s)", "value": "min. 3km" },
+        { "label": "minimum and maximum distances of declared goal(s) from any goal set by the director", "value": "min. 1km" }
+      ],
+      "loggerMarker": "7"
+    }
+  ]
+}

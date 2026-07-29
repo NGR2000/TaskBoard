@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "_source": "実物のタスクデータシート（XXV Krosno IMBC, Pre Worlds 2025, Flight 2, Tasks #6-#7）をそのまま起こしたもの。",
+  "basicInfo": {
+    "competitionName": "XXV Górskie Zawody Balonowe Krosno 2025 (Pre Worlds)",
+    "date": "01.05.2025 PM",
+    "fields": [
+      { "label": "Flight", "value": "2" },
+      { "label": "Tasks", "value": "#6, #7" },
+      { "label": "Launch area", "value": "Individual launch" },
+      { "label": "Launch period", "value": "18:30 - 19:00" },
+      { "label": "PZs in force", "value": "all active" },
+      { "label": "Solo flight", "value": "not required" },
+      { "label": "Sunrise/Sunset", "value": "05:10 / 19:50" },
+      { "label": "Min. ILP → all goals", "value": "1km" },
+      { "label": "Next briefing", "value": "02.05.2025 04:30" },
+      { "label": "QNH", "value": "1022" }
+    ]
+  },
+  "tasks": [
+    {
+      "taskNo": "6",
+      "taskId": "FIN",
+      "ruleNo": "15.4",
+      "markerColor": "any",
+      "markerDrop": "free",
+      "mma": "see sketch",
+      "scoringPeriodEnd": "19:45:00",
+      "scoringArea": "entire contest area",
+      "targets": [
+        { "coordinates": "5519/0486", "altitude": "906ft" }
+      ],
+      "fields": [
+        { "label": "Task order", "value": "in order" }
+      ],
+      "loggerMarker": "1"
+    },
+    {
+      "taskNo": "7",
+      "taskId": "3DT",
+      "ruleNo": "15.20",
+      "scoringPeriodEnd": "19:45:00",
+      "scoringArea": "entire contest area",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Description of set airspaces", "value": "inner circle: radius 2km\nouter circle: radius 3km\nScoring area will be the airspace between the cylinders (no vertical limits)\n\npilot declared centre:\n - coordinate to be declared in loggergoal#1\n - declared before mark of task #6\n - min. 3km from goal of task #6" }
+      ]
+    }
+  ]
+}

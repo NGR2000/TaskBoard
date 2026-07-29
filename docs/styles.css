@@ -114,6 +114,7 @@ button { font: inherit; cursor: pointer; }
 .value-en { font-size: 11px; color: var(--muted); font-weight: 400; display: block; line-height: 1.3; }
 .row.wide { display: block; }
 .row.wide .row-value { text-align: left; margin-top: 3px; }
+.row.wide .value-ja, .row.wide .value-en { white-space: pre-line; }
 .row.highlight { background: #f4f8ff; margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
 .dot { font-size: 15px; }
 

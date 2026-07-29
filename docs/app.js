@@ -130,13 +130,14 @@
   }
 
   /** 値の中に色名が含まれていれば色コードを返す（●の色付け用） */
+  /** 単語単位の完全一致でのみ色を拾う。部分文字列一致だと "declared" が
+   *  "red" を内包するなどの誤爆が起きる（長文の説明文で実際に発生した）。 */
   function colorOf(value) {
-    var k = normKey(value);
-    if (!k) return null;
-    var names = Object.keys(valueMap);
-    for (var i = 0; i < names.length; i++) {
-      var entry = valueMap[names[i]];
-      if (entry.color && k.indexOf(names[i]) >= 0) return entry.color;
+    if (!value) return null;
+    var words = String(value).toLowerCase().replace(/colour/g, 'color').split(/[^a-z0-9]+/);
+    for (var i = 0; i < words.length; i++) {
+      var entry = words[i] && valueMap[words[i]];
+      if (entry && entry.color) return entry.color;
     }
     return null;
   }
@@ -634,7 +635,7 @@
             esc(nameJa || ('Target ' + (i + 1))) + '</span>' : '') +
           (t.coordinates ? '<span class="target-coord">' + esc(t.coordinates) + '</span>' : '') +
         '</div>' +
-        (t.mma ? '<div class="target-mma">MMA ' + esc(t.mma) + ' <span class="target-sub">マーカー計測エリア</span></div>' : '') +
+        (t.mma ? '<div class="target-mma">MMA ' + esc(lookupValue(t.mma).ja) + ' <span class="target-sub">マーカー計測エリア</span></div>' : '') +
         (t.altitude ? '<div class="target-sub">高度 / Altitude: ' + esc(t.altitude) + '</div>' : '') +
         (t.note ? '<div class="target-sub">' + esc(t.note) + '</div>' : '') +
         ((t.name || t.color) && V.en ? '<div class="target-sub">' + esc(V.en) + '</div>' : '') +
