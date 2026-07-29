@@ -1,0 +1,551 @@
+{
+  "tasks": [
+    {
+      "rule_number": "15.1",
+      "task_id": "PDG",
+      "title_en": "PILOT DECLARED GOAL",
+      "title_ja": "パイロット宣言ゴール",
+      "sections": {
+        "15.1.1": {
+          "text_en": "Competitors will attempt to achieve a mark close to a goal selected and declared by him before take-off.",
+          "text_ja": "競技者は、離陸前に自ら選択し宣言したゴールの近くにマークを残すことを試みる。"
+        },
+        "15.1.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "宣言の方法",
+            "b": "許可されるゴールの数",
+            "c": "宣言に利用可能なゴール",
+            "d": "TDS に従った、CLP または ILP からゴールまでの最小および最大距離",
+            "e": "ディレクターが設定したいかなるゴールからの、ゴールまでの最小および最大距離"
+          }
+        },
+        "15.1.3": {
+          "text_en": "The result is the distance from the mark to the nearest valid declared goal. Smallest result is best.",
+          "text_ja": "結果は、マークから最も近い有効な宣言ゴールまでの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.2",
+      "task_id": "JDG",
+      "title_en": "JUDGE DECLARED GOAL",
+      "title_ja": "ジャッジ宣言ゴール",
+      "sections": {
+        "15.2.1": {
+          "text_en": "Competitors will attempt to achieve a mark close to a set goal.",
+          "text_ja": "競技者は、設定されたゴールの近くにマークを残すことを試みる。"
+        },
+        "15.2.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "設定されたゴール／ターゲットの位置"
+          }
+        },
+        "15.2.3": {
+          "text_en": "The result is the distance from the mark to the target, if displayed, or goal. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲット（表示されている場合）またはゴールまでの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.3",
+      "task_id": "HWZ",
+      "title_en": "HESITATION WALTZ",
+      "title_ja": "ヘジテーション・ワルツ",
+      "sections": {
+        "15.3.1": {
+          "text_en": "Competitors will attempt to achieve a mark close to one of several set goals.",
+          "text_ja": "競技者は、複数の設定されたゴールのうちのいずれかの近くにマークを残すことを試みる。"
+        },
+        "15.3.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "複数の設定されたゴール／ターゲットの位置"
+          }
+        },
+        "15.3.3": {
+          "text_en": "The result is the distance from the mark to the nearest target, if displayed, or goal. Smallest result is best.",
+          "text_ja": "結果は、マークから最も近いターゲット（表示されている場合）またはゴールまでの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.4",
+      "task_id": "FIN",
+      "title_en": "FLY IN",
+      "title_ja": "フライ・イン",
+      "sections": {
+        "15.4.1": {
+          "text_en": "Competitors will find their own launch areas and attempt to achieve a mark close to a set goal or target.",
+          "text_ja": "競技者は自らの離陸地点を見つけ、設定されたゴールまたはターゲットの近くにマークを残すことを試みる。"
+        },
+        "15.4.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "設定されたゴール／ターゲットの位置"
+          }
+        },
+        "15.4.3": {
+          "text_en": "The result is the distance from the mark to the target, if displayed, or goal. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲット（表示されている場合）またはゴールまでの距離である。最も小さい結果が最良となる。"
+        },
+        "15.4.4": {
+          "text_en": "Only one scoring attempt (marker drop) may be made.",
+          "text_ja": "得点対象となる試技（マーカー投下）は 1 回のみ行うことができる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.5",
+      "task_id": "FON",
+      "title_en": "FLY ON",
+      "title_ja": "フライ・オン",
+      "sections": {
+        "15.5.1": {
+          "text_en": "Competitors will attempt to achieve a mark close to a goal selected and declared by them before take-off or during flight.",
+          "text_ja": "競技者は、離陸前または飛行中に自ら選択し宣言したゴールの近くにマークを残すことを試みる。"
+        },
+        "15.5.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "宣言の方法",
+            "b": "許可されるゴールの数",
+            "c": "宣言に利用可能なゴール",
+            "d": "直前のマークと宣言ゴールの間の最小および最大距離",
+            "e": "宣言地点と宣言ゴールの間の最小および最大距離",
+            "f": "ディレクターが設定したいかなるゴールから宣言ゴールまでの最小および最大距離"
+          }
+        },
+        "15.5.3": {
+          "text_en": "The result is the distance from the mark to the nearest valid declared goal. Smallest result is best.",
+          "text_ja": "結果は、マークから最も近い有効な宣言ゴールまでの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.6",
+      "task_id": "HNH",
+      "title_en": "HARE AND HOUNDS",
+      "title_ja": "ヘア・アンド・ハウンズ",
+      "sections": {
+        "15.6.1": {
+          "text_en": "Competitors will follow a hare balloon and attempt to achieve a mark close to a target displayed by the hare no more than two meters upwind of the basket after landing.",
+          "text_ja": "競技者はヘア気球を追跡し、着陸後にバスケットの風上2メートル以内にヘアが表示するターゲットの近くにマークを残すことを試みる。"
+        },
+        "15.6.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "ヘア気球の説明",
+            "b": "ヘア気球の予定飛行時間"
+          }
+        },
+        "15.6.3": {
+          "text_en": "The result is the distance from the mark to the target. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲットまでの距離である。最も小さい結果が最良となる。"
+        },
+        "15.6.4": {
+          "text_en": "Variation from intended flight duration of the hare shall not be ground for complaint.",
+          "text_ja": "ヘアの予定飛行時間からの逸脱は、抗議の理由とはならない。"
+        },
+        "15.6.5": {
+          "text_en": "The hare may deflate after landing and may be removed from the field.",
+          "text_ja": "ヘアは着陸後に気球をしぼませ、フィールドから撤去される場合がある。"
+        },
+        "15.6.6": {
+          "text_en": "The hare may display a banner hanging below his basket. No competitor shall display any banner hanging below the basket during this task.",
+          "text_ja": "ヘアはバスケットの下にバナーを掲示することができる。競技者は、このタスク中にバスケットの下にバナーを掲示してはならない。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.7",
+      "task_id": "WSD",
+      "title_en": "WATERSHIP DOWN",
+      "title_ja": "ウォーターシップ・ダウン",
+      "sections": {
+        "15.7.1": {
+          "text_en": "Competitors will fly to the launch point of a hare balloon, follow the hare and attempt to achieve a mark close to a target displayed by the hare no more than two meters upwind of the basket after landing.",
+          "text_ja": "競技者はヘア気球の離陸地点まで飛行し、ヘアを追跡し、着陸後にバスケットの風上2メートル以内にヘアが表示するターゲットの近くにマークを残すことを試みる。"
+        },
+        "15.7.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "ヘア気球の説明",
+            "b": "ヘア気球の離陸地点の位置",
+            "c": "ヘア気球の設定離陸時刻",
+            "d": "ヘア気球の予定飛行時間"
+          }
+        },
+        "15.7.3": {
+          "text_en": "The result is the distance from the mark to the target. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲットまでの距離である。最も小さい結果が最良となる。"
+        },
+        "15.7.4": {
+          "text_en": "If the hare balloon does not take off within 5 minutes after the set time then this task is considered cancelled.",
+          "text_ja": "ヘア気球が設定時刻から5分以内に離陸しない場合、このタスクはキャンセルされたものとみなす。"
+        },
+        "15.7.5": {
+          "text_en": "Variation from the flight duration of the hare shall not be ground for complaint.",
+          "text_ja": "ヘアの飛行時間の変動は、抗議の理由とはならない。"
+        },
+        "15.7.6": {
+          "text_en": "The hare may deflate after landing and may be removed from the field.",
+          "text_ja": "ヘアは着陸後に気球をしぼませ、フィールドから撤去される場合がある。"
+        },
+        "15.7.7": {
+          "text_en": "The hare may display a banner hanging below his basket. No competitor shall display any banner hanging below the basket during this task.",
+          "text_ja": "ヘアはバスケットの下にバナーを掲示することができる。競技者は、このタスク中にバスケットの下にバナーを掲示してはならない。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.8",
+      "task_id": "GBM",
+      "title_en": "GORDON BENNETT MEMORIAL",
+      "title_ja": "ゴードン・ベネット・メモリアル",
+      "sections": {
+        "15.8.1": {
+          "text_en": "Competitors will attempt to achieve a mark within a scoring area(s) close to a set goal.",
+          "text_ja": "競技者は、設定されたゴールの近くにある得点区域内にマークを残すことを試みる。"
+        },
+        "15.8.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "ゴール／ターゲットの位置",
+            "b": "得点区域の説明"
+          }
+        },
+        "15.8.3": {
+          "text_en": "The result is the distance from the mark to the target, if displayed, or goal. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲット（表示されている場合）またはゴールまでの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.9",
+      "task_id": "CRT",
+      "title_en": "CALCULATED RATE OF APPROACH TASK",
+      "title_ja": "接近率計算タスク",
+      "sections": {
+        "15.9.1": {
+          "text_en": "Competitors will attempt to achieve a mark within a valid scoring area close to a set goal. The scoring area(s) will have unique times of validity.",
+          "text_ja": "競技者は、設定されたゴールの近くにある有効な得点区域内にマークを残すことを試みる。得点区域には、それぞれ固有の有効時間が設定されている。"
+        },
+        "15.9.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "ゴール／ターゲットの位置",
+            "b": "得点区域の説明およびその有効時間"
+          }
+        },
+        "15.9.3": {
+          "text_en": "The result is the distance from the mark to the target, if displayed, or goal. Smallest result is best.",
+          "text_ja": "結果は、マークからターゲット（表示されている場合）またはゴールまでの距離である。最も小さい結果が最良となる。"
+        },
+        "15.9.4": {
+          "text_en": "A competitor who does not achieve a mark inside a scoring area during its time of validity, will not achieve a result.",
+          "text_ja": "得点区域の有効時間内にマークを残さなかった競技者は、結果を得ることができない。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.10",
+      "task_id": "RTA",
+      "title_en": "RACE TO AN AREA",
+      "title_ja": "レース・トゥ・アン・エリア",
+      "sections": {
+        "15.10.1": {
+          "text_en": "Competitors will attempt to achieve a mark or valid track point, as specified in the task data, in the shortest time within a scoring area(s) or airspace(s).",
+          "text_ja": "競技者は、タスクデータで指定されたとおり、得点区域または空域内で最短時間でマークまたは有効なトラックポイントを達成することを試みる。"
+        },
+        "15.10.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "タイミング（計時）の取り決め",
+            "b": "得点区域の説明"
+          }
+        },
+        "15.10.3": {
+          "text_en": "The result is the elapsed time from the take off to the mark or first valid track point. Smallest result is best.",
+          "text_ja": "結果は、離陸からマークまたは最初の有効なトラックポイントまでの経過時間である。最も小さい結果が最良となる。"
+        },
+        "15.10.4": {
+          "text_en": "The timing ends at the moment the marker is on the ground as seen by the officials, the electronic mark is dropped or at the moment of the first valid track point in the scoring area, if track points only was set.",
+          "text_ja": "計時は、審判がマーカーが地面にあると確認した瞬間、電子マークが投下された瞬間、またはトラックポイントのみが設定されている場合は得点区域内の最初の有効なトラックポイントの瞬間に終了する。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.11",
+      "task_id": "ELB",
+      "title_en": "ELBOW",
+      "title_ja": "エルボー",
+      "sections": {
+        "15.11.1": {
+          "text_en": "Competitors will attempt to achieve the greatest change of direction in flight.",
+          "text_ja": "競技者は、飛行中の方向変化量を最大にすることを試みる。"
+        },
+        "15.11.2": {
+          "title_en": "Task data (If no markers are used)",
+          "items": {
+            "a": "トラックポイント「A」の説明",
+            "b": "トラックポイント「B」の説明",
+            "c": "トラックポイント「C」の説明"
+          }
+        },
+        "15.11.3": {
+          "text_en": "(see section IV events with observers)",
+          "text_ja": "（セクションIV「オブザーバーを伴う競技」を参照）"
+        },
+        "15.11.4": {
+          "text_en": "The result is 180 degrees minus the angle ABC. Greatest result is best.",
+          "text_ja": "結果は、180度から角度ABCを引いた値である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.12",
+      "task_id": "LRN",
+      "title_en": "LAND RUN",
+      "title_ja": "ランド・ラン",
+      "sections": {
+        "15.12.1": {
+          "text_en": "Competitors will attempt to achieve the greatest area of a triangle \"A\", \"B\" and \"C\"",
+          "text_ja": "競技者は、三角形「A」「B」「C」の面積を最大にすることを試みる。"
+        },
+        "15.12.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "点「A」の位置",
+            "b": "点「B」の決定方法",
+            "c": "点「C」の決定方法",
+            "d": "得点区域の説明"
+          }
+        },
+        "15.12.3": {
+          "text_en": "The result is the area of triangle ABC. Greatest result is best.",
+          "text_ja": "結果は三角形ABCの面積である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.13",
+      "task_id": "MDT",
+      "title_en": "MINIMUM DISTANCE",
+      "title_ja": "ミニマム・ディスタンス",
+      "sections": {
+        "15.13.1": {
+          "text_en": "Competitors will attempt to achieve a mark or valid track point close to the reference point, after flying a minimum set time or distance.",
+          "text_ja": "競技者は、設定された最小時間または距離を飛行した後、基準点の近くにマークまたは有効なトラックポイントを残すことを試みる。"
+        },
+        "15.13.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "タイミング（計時）の取り決め",
+            "b": "設定された最小時間または距離",
+            "c": "基準点"
+          }
+        },
+        "15.13.3": {
+          "text_en": "The result is the distance from the mark or closest valid track point to the reference point. Smallest result is best.",
+          "text_ja": "結果は、マークまたは最も近い有効なトラックポイントから基準点までの距離である。最も小さい結果が最良となる。"
+        },
+        "15.13.4": {
+          "text_en": "The scoring position is the mark or best track point after the minimum time or distance has elapsed. Otherwise the scoring position will be the landing position, provided that the balloon has been seen by an official to be still airborne after the minimum time.",
+          "text_ja": "得点位置は、最小時間または距離が経過した後のマークまたは最良のトラックポイントである。それ以外の場合、気球が最小時間経過後も空中にあることを審判が確認した場合に限り、着陸位置が得点位置となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.14",
+      "task_id": "SFL",
+      "title_en": "SHORTEST FLIGHT",
+      "title_ja": "ショーテスト・フライト",
+      "sections": {
+        "15.14.1": {
+          "text_en": "Competitors will attempt to achieve a mark or valid track point close to the reference point within a set scoring area(s).",
+          "text_ja": "競技者は、設定された得点区域内で、基準点の近くにマークまたは有効なトラックポイントを残すことを試みる。"
+        },
+        "15.14.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "得点区域の説明",
+            "b": "基準点"
+          }
+        },
+        "15.14.3": {
+          "text_en": "The result is the distance from the mark or best valid track point to the reference point. Smallest result is best.",
+          "text_ja": "結果は、マークまたは最良の有効なトラックポイントから基準点までの距離である。最も小さい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.15",
+      "task_id": "MDD",
+      "title_en": "MINIMUM DISTANCE DOUBLE DROP",
+      "title_ja": "ミニマム・ディスタンス・ダブルドロップ",
+      "sections": {
+        "15.15.1": {
+          "text_en": "Competitors will attempt to achieve two marks or valid track points close together in different scoring areas.",
+          "text_ja": "競技者は、異なる得点区域内で、互いに近接した2つのマークまたは有効なトラックポイントを達成することを試みる。"
+        },
+        "15.15.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "得点区域の説明"
+          }
+        },
+        "15.15.3": {
+          "text_en": "The result is the distance between the marks or track points. Smallest result is best.",
+          "text_ja": "結果は、2つのマークまたはトラックポイント間の距離である。最も小さい結果が最良となる。"
+        },
+        "15.15.4": {
+          "text_en": "Competitors will not achieve a result, unless they have valid track points or marks in different scoring areas as per the TDS.",
+          "text_ja": "競技者は、TDSに従って異なる得点区域内に有効なトラックポイントまたはマークを持たない限り、結果を得ることはできない。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.16",
+      "task_id": "XDT",
+      "title_en": "MAXIMUM DISTANCE TIME",
+      "title_ja": "マキシマム・ディスタンス・タイム",
+      "sections": {
+        "15.16.1": {
+          "text_en": "Competitors will attempt to achieve a mark or valid track point far away from the reference point, within a maximum set time.",
+          "text_ja": "競技者は、設定された最大時間内に、基準点から遠く離れた位置にマークまたは有効なトラックポイントを残すことを試みる。"
+        },
+        "15.16.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "設定された最大時間",
+            "b": "タイミング（計時）の取り決め",
+            "c": "基準点"
+          }
+        },
+        "15.16.3": {
+          "text_en": "The result is the distance from the mark or furthest valid track point to the reference point. Greatest result is best.",
+          "text_ja": "結果は、マークまたは最も遠い有効なトラックポイントから基準点までの距離である。最も大きい結果が最良となる。"
+        },
+        "15.16.4": {
+          "text_en": "(see section IV events with observers)",
+          "text_ja": "（セクションIV「オブザーバーを伴う競技」を参照）"
+        }
+      }
+    },
+    {
+      "rule_number": "15.17",
+      "task_id": "XDI",
+      "title_en": "MAXIMUM DISTANCE",
+      "title_ja": "マキシマム・ディスタンス",
+      "sections": {
+        "15.17.1": {
+          "text_en": "Competitors will attempt to achieve a mark or valid track point far away from the reference point within a set scoring area(s).",
+          "text_ja": "競技者は、設定された得点区域内で、基準点から遠く離れた位置にマークまたは有効なトラックポイントを残すことを試みる。"
+        },
+        "15.17.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "得点区域の説明",
+            "b": "基準点"
+          }
+        },
+        "15.17.3": {
+          "text_en": "The result is the distance from the mark or valid track point to the reference point. Greatest result is best.",
+          "text_ja": "結果は、マークまたは有効なトラックポイントから基準点までの距離である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.18",
+      "task_id": "XDD",
+      "title_en": "MAXIMUM DISTANCE DOUBLE DROP",
+      "title_ja": "マキシマム・ディスタンス・ダブルドロップ",
+      "sections": {
+        "15.18.1": {
+          "text_en": "Competitors will attempt to achieve two marks or valid track points far apart in the scoring area(s).",
+          "text_ja": "競技者は、得点区域内で互いに遠く離れた2つのマークまたは有効なトラックポイントを達成することを試みる。"
+        },
+        "15.18.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "得点区域の説明"
+          }
+        },
+        "15.18.3": {
+          "text_en": "The result is the distance between the marks or farthest valid track points. Greatest result is best.",
+          "text_ja": "結果は、2つのマークまたは最も遠い有効なトラックポイント間の距離である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.19",
+      "task_id": "ANG",
+      "title_en": "ANGLE",
+      "title_ja": "アングル",
+      "sections": {
+        "15.19.1": {
+          "text_en": "Competitors will attempt to achieve the greatest change of direction from a set direction. The change of direction is the angle between the set direction and line \"A-B\".",
+          "text_ja": "競技者は、設定された方向からの方向変化量を最大にすることを試みる。方向変化は、設定方向と線分「A–B」の間の角度である。"
+        },
+        "15.19.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "点「A」と「B」の説明",
+            "b": "設定方向",
+            "c": "「A」から「B」までの最小および最大距離"
+          }
+        },
+        "15.19.3": {
+          "text_en": "The result is the angle between the set direction and the line \"A-B\". Greatest result is best.",
+          "text_ja": "結果は、設定方向と線分「A–B」の間の角度である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.20",
+      "task_id": "3DT",
+      "title_en": "3D SHAPE TASK",
+      "title_ja": "3Dシェイプタスク",
+      "sections": {
+        "15.20.1": {
+          "text_en": "Competitors will attempt to achieve the greatest distance within a set airspace.",
+          "text_ja": "競技者は、設定された空域内で最大距離を達成することを試みる。"
+        },
+        "15.20.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "設定された空域の説明"
+          }
+        },
+        "15.20.3": {
+          "text_en": "The result is the accumulated horizontal distance between valid track points in the set airspace(s). Greatest result is best.",
+          "text_ja": "結果は、設定された空域内の有効なトラックポイント間の累積水平距離である。最も大きい結果が最良となる。"
+        }
+      }
+    },
+    {
+      "rule_number": "15.21",
+      "task_id": "APT",
+      "title_en": "ALTITUDE PROFILE TASK",
+      "title_ja": "高度プロファイルタスク",
+      "sections": {
+        "15.21.1": {
+          "text_en": "Competitors will attempt to achieve the greatest time within a set airspace. The airspace is defined by one or two bands around a given altitude profile where the time within the inner band counts 2x, the time within the outer band counts 1x and the time outside the outer band does not count. The task will be started with an electronic mark.",
+          "text_ja": "競技者は、設定された空域内で最大時間を達成することを試みる。空域は、与えられた高度プロファイルの周囲に1つまたは2つの帯で定義され、内側の帯での時間は2倍、外側の帯での時間は1倍として計算され、外側の帯の外の時間は計算されない。タスクは電子マークで開始される。"
+        },
+        "15.21.2": {
+          "title_en": "Task data",
+          "items": {
+            "a": "設定された空域の説明（スケッチ参照）"
+          }
+        },
+        "15.21.3": {
+          "text_en": "The result is the accumulated time in the set airspace(s). Greatest result is best.",
+          "text_ja": "結果は、設定された空域内での累積時間である。最も大きい結果が最良となる。"
+        }
+      }
+    }
+  ]
+}
