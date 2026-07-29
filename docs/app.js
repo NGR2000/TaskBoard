@@ -60,7 +60,10 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function isBlank(v) {
-    return v === null || v === undefined || String(v).trim() === '';
+    if (v === null || v === undefined) return true;
+    var s = String(v).trim();
+    // タスクシートでは「該当なし」の意味で "-" 単独がよく使われる（実データで確認）
+    return s === '' || /^[-–—]+$/.test(s);
   }
   function el(id) { return document.getElementById(id); }
 
