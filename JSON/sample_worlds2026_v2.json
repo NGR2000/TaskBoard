@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "basicInfo": {
+    "competitionName": "26th FAI World Hot Air Balloon Championship 2026",
+    "date": "2026年8月20日（木）AM",
+    "fields": [
+      { "label": "Flight No", "value": "5" },
+      { "label": "Briefing", "value": "05:00" },
+      { "label": "Launch Period", "value": "0600 - 0700" },
+      { "label": "Launch Requirement", "value": "CLP" },
+      { "label": "Common Launch Point", "value": "4512/7788" },
+      { "label": "Task Order", "value": "In Order" },
+      { "label": "QNH", "value": "1016 hPa" },
+      { "label": "Sunrise / Sunset", "value": "0512 / 1948" },
+      { "label": "Contest Area", "value": "See Competition Map 2026-A" },
+      { "label": "Prohibited Zones", "value": "All Active" },
+      { "label": "Fuel Reserve", "value": "30 min" }
+    ],
+    "notes": "All marks are electronic (logger). Physical markers only where stated."
+  },
+  "tasks": [
+    {
+      "taskNo": "12",
+      "taskId": "PDG",
+      "ruleNo": "15.1",
+      "scoringPeriodEnd": "08:30",
+      "fields": [
+        { "label": "Number of Goals", "value": "3" },
+        { "label": "Declaration Method", "value": "Before Take Off" },
+        { "label": "Min / Max Distance from CLP", "value": "3000m / 8000m" },
+        { "label": "Min Distance from Set Goals", "value": "1000m" },
+        { "label": "Logger Marker", "value": "Goal 1, 2, 3" },
+        { "label": "Scoring Area", "value": "Entire Contest Area" }
+      ],
+      "notes": "Any valid coordinates with altitude."
+    },
+    {
+      "taskNo": "13",
+      "taskId": "HWZ",
+      "markerColor": "Yellow",
+      "markerDrop": "GMD",
+      "scoringPeriodEnd": "09:00",
+      "targets": [
+        { "name": "Red",   "color": "Red",   "coordinates": "4890/7102", "mma": "R 70m" },
+        { "name": "White", "color": "White", "coordinates": "4773/7415", "mma": "R 80m" },
+        { "name": "Blue",  "color": "Blue",  "coordinates": "4692/7390", "mma": "R 100m" }
+      ],
+      "fields": [
+        { "label": "Logger Marker", "value": "Mark 4" },
+        { "label": "Scoring Area", "value": "Entire Contest Area" }
+      ]
+    },
+    {
+      "taskNo": "14",
+      "taskId": "CRT",
+      "markerColor": "Blue",
+      "markerDrop": "Free",
+      "scoringPeriodEnd": "09:30",
+      "targets": [
+        { "name": "Target A", "color": "Red", "coordinates": "5120/6988", "mma": "R 50m" }
+      ],
+      "fields": [
+        { "label": "Scoring Area", "value": "Ring 500m - 1500m from target" },
+        { "label": "Time of Validity", "value": "0730 - 0800" },
+        { "label": "Logger Marker", "value": "Mark 5" },
+        { "label": "Approach Corridor", "value": "090° ± 30°" }
+      ],
+      "notes": "A mark outside the time of validity scores no result."
+    },
+    {
+      "taskNo": "15",
+      "taskId": "APT",
+      "scoringPeriodEnd": "10:00",
+      "fields": [
+        { "label": "Altitude Profile", "value": "See attached sheet" },
+        { "label": "Altitude Band", "value": "Inner ±50m (x2) / Outer ±100m (x1)" },
+        { "label": "Timing", "value": "Started by electronic mark" },
+        { "label": "Logger Marker", "value": "Mark 6" }
+      ]
+    }
+  ]
+}

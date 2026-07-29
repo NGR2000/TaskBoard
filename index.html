@@ -3,368 +3,195 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🎈 TaskBoard</title>
+<title>TaskBoard 管理</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Hiragino Sans','Yu Gothic',sans-serif; background:#fff; color:#222; }
-.header { background:#1a1a1a; color:#fff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
-.header span { font-size:16px; font-weight:bold; }
-.btn { padding:12px 20px; border-radius:8px; border:none; font-size:15px; font-weight:bold; cursor:pointer; width:100%; margin-bottom:10px; }
+body { font-family: 'Hiragino Sans','Yu Gothic',sans-serif; background:#fff; color:#1a1a1a; line-height:1.55; }
+.header { background:#1a1a1a; color:#fff; padding:13px 15px; position:sticky; top:0; z-index:10; }
+.header b { font-size:16px; }
+.header small { display:block; font-size:11px; color:#b9b9b9; }
+.wrap { padding:15px; max-width:640px; margin:0 auto; }
+h2 { font-size:15px; margin:26px 0 8px; padding-bottom:5px; border-bottom:2px solid #1a1a1a; }
+h2:first-of-type { margin-top:6px; }
+.btn { display:block; width:100%; padding:13px 18px; margin-bottom:9px; border:none; border-radius:10px; font-size:15px; font-weight:bold; cursor:pointer; }
 .btn-primary { background:#1a1a1a; color:#fff; }
-.btn-secondary { background:#eee; color:#222; }
-.btn-small { background:#444; color:#fff; padding:6px 12px; border-radius:6px; border:none; font-size:13px; cursor:pointer; width:auto; margin:0; }
-.card { border:2px solid #222; border-radius:12px; margin-bottom:12px; overflow:hidden; }
-.card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:#f8f8f8; cursor:pointer; user-select:none; }
-.card-body { padding:4px 16px 16px; }
-.row { display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; border-bottom:1px solid #eee; }
-.row-label { font-size:14px; color:#666; flex-shrink:0; margin-right:8px; }
-.row-value { font-size:16px; font-weight:bold; text-align:right; }
-.gmd-alert { background:#fff0f0; border:2px solid #cc0000; border-radius:8px; padding:10px 14px; margin:12px 0; color:#cc0000; font-weight:bold; font-size:15px; line-height:1.5; }
-.timer-box { margin-top:12px; padding:12px 14px; background:#f0f0f0; border-radius:8px; }
-.timer-display { font-family:monospace; font-size:22px; font-weight:bold; color:#fff; padding:8px 14px; border-radius:8px; display:inline-block; margin-top:6px; }
-.notes { margin-top:10px; padding:8px 12px; background:#fffbe0; border:1px solid #cc9900; border-radius:8px; font-size:14px; color:#554400; line-height:1.6; }
-.wrap { padding:16px; max-width:600px; margin:0 auto; }
-.loading { display:flex; align-items:center; justify-content:center; height:80vh; font-size:16px; color:#666; }
-textarea { width:100%; height:140px; padding:12px; border-radius:8px; border:2px solid #ccc; font-size:12px; font-family:monospace; resize:vertical; outline:none; }
-.error { padding:14px; background:#fff0f0; border:2px solid #cc0000; border-radius:8px; color:#cc0000; font-size:13px; margin-top:8px; white-space:pre-wrap; }
-.info { padding:10px 12px; background:#f0f4ff; border-radius:8px; font-size:13px; color:#333; line-height:1.7; margin-bottom:12px; }
-.updated { font-size:12px; color:#888; text-align:right; margin-bottom:8px; }
-img { width:100%; display:block; }
+.btn-secondary { background:#ececec; color:#1a1a1a; }
+.btn-small { background:#3d3d3d; color:#fff; border:none; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; white-space:nowrap; }
+.btn-danger-outline { background:none; border:1px solid #cc0000; color:#cc0000; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; }
+.btn-ghost { background:none; border:1px solid #ddd; color:#aaa; padding:9px 18px; border-radius:7px; font-size:12px; cursor:pointer; }
+textarea { width:100%; min-height:150px; padding:11px; border-radius:9px; border:2px solid #ccc; font-size:12px; font-family:ui-monospace,Menlo,monospace; resize:vertical; outline:none; }
+textarea:focus { border-color:#1a1a1a; }
+.share { background:#f6f6f6; border-radius:10px; padding:12px; font-size:12px; word-break:break-all; }
+.share code { display:block; background:#fff; border:1px solid #e0e0e0; border-radius:6px; padding:8px; margin:6px 0; font-size:11px; }
+.hint { font-size:12px; color:#6b6b6b; line-height:1.75; margin-top:6px; }
+.row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid #eee; font-size:14px; }
+.row:last-child { border-bottom:none; }
+.msg { padding:10px 12px; border-radius:9px; font-size:13px; margin-top:8px; white-space:pre-wrap; }
+.msg.ok { background:#eefaf0; color:#006633; }
+.msg.err { background:#fff1f1; color:#cc0000; }
+.msg.info { background:#eef3ff; color:#1a3a7a; }
+.status { font-size:13px; color:#6b6b6b; }
 </style>
 </head>
 <body>
-<div id="app">
-  <div class="loading">読み込み中...</div>
+<div class="header">
+  <b>🎈 TaskBoard 管理</b>
+  <small>入力・管理用。閲覧はクルー用アプリで行います</small>
 </div>
+
+<div class="wrap">
+
+  <h2>1. クルーに配るリンク</h2>
+  <div class="share">
+    このURLをLINEで共有してください。GASを再デプロイしてもこのリンクは変わりません。
+    <code id="shareUrl">-</code>
+    <button class="btn-small" onclick="copyShare()">URLをコピー</button>
+    <a id="openApp" href="#" target="_blank" style="margin-left:8px;font-size:13px">アプリを開く</a>
+  </div>
+  <div class="hint">
+    閲覧アプリ側の <b>config.js</b> に上の <code style="display:inline;padding:1px 4px">/exec</code> URL を書いてコミットしておくと、
+    <code style="display:inline;padding:1px 4px">?api=</code> 無しの短いURLでも開けるようになります。
+  </div>
+
+  <h2>2. タスクシートを登録する</h2>
+  <div class="hint" style="margin-top:0">
+    Claudeにタスクシート画像を送り「<b>TaskBoard用JSONに変換して</b>」と依頼 → 出てきたJSONを貼り付け。
+  </div>
+  <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
+  <button class="btn btn-primary" style="margin-top:9px" onclick="saveJson()">登録して全クルーに反映</button>
+  <div id="jsonMsg"></div>
+
+  <h2>3. 原本タスクシート画像</h2>
+  <div class="row">
+    <span id="imageStatus" class="status">確認中…</span>
+    <div>
+      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
+      <button class="btn-small" onclick="document.getElementById('imageInput').click()">選択して保存</button>
+    </div>
+  </div>
+  <div id="imageMsg"></div>
+
+  <h2>4. タスク別スケッチ</h2>
+  <div id="sketchList"><div class="status">確認中…</div></div>
+  <div id="sketchMsg"></div>
+
+  <h2>5. リセット</h2>
+  <div class="hint" style="margin-top:0">タスクシート・原本画像・スケッチをすべて消します。競技中は操作しないでください。</div>
+  <button class="btn-ghost" style="margin-top:8px" onclick="resetAll()">データをリセット</button>
+  <div id="resetMsg"></div>
+
+  <div style="height:40px"></div>
+</div>
+
 <script>
-const COLORS = {
-  red:    { text:"#cc0000", label:"赤" },
-  blue:   { text:"#0033cc", label:"青" },
-  yellow: { text:"#997700", label:"黄" },
-  orange: { text:"#cc5500", label:"橙" },
-  white:  { text:"#333333", label:"白" },
-  green:  { text:"#006600", label:"緑" },
-  black:  { text:"#000000", label:"黒" },
-  pink:   { text:"#cc0066", label:"桃" },
-};
+// URL はサーバー側（getAdminState）から受け取る
+var EXEC_URL = '';
+var APP_URL = '';
+var adminState = null;
 
-function getColor(name) {
-  if (!name) return COLORS.black;
-  const k = name.toLowerCase();
-  for (const [key,v] of Object.entries(COLORS)) if (k.includes(key)) return v;
-  return COLORS.black;
+function shareUrl() {
+  if (!APP_URL) return '';
+  return EXEC_URL ? APP_URL + '?api=' + encodeURIComponent(EXEC_URL) : APP_URL;
 }
 
-let state = {
-  screen: "loading",
-  data: null,
-  image: null,
-  updatedAt: null,
-  open: {},
-  sketchMap: {},
-  sketchCache: {},
-  currentSketchTaskNo: null
-};
-let timers = [];
+function msg(id, text, kind) {
+  document.getElementById(id).innerHTML = text
+    ? '<div class="msg ' + (kind || 'info') + '">' + text + '</div>'
+    : '';
+}
 
-function render() {
-  const app = document.getElementById("app");
-  timers.forEach(clearInterval); timers = [];
-
-  if (state.screen === "loading") {
-    app.innerHTML = '<div class="loading">読み込み中... v3</div>';
-    return;
+function copyShare() {
+  var url = shareUrl();
+  if (!url) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function () { alert('コピーしました'); },
+      function () { prompt('コピーしてください', url); });
+  } else {
+    prompt('コピーしてください', url);
   }
-
-  if (state.screen === "home") {
-    app.innerHTML = `
-      <div class="header"><span>🎈 TaskBoard</span><span></span></div>
-      <div class="wrap">
-        <div style="font-size:26px;font-weight:bold;margin-bottom:6px">熱気球競技<br>タスク管理</div>
-        <div style="font-size:13px;color:#888;margin-bottom:28px">FAI / CIA ルール対応</div>
-        <button class="btn btn-primary" onclick="showScreen('upload')">📋 タスクシートを読み込む</button>
-        <div style="margin-top:16px;padding:16px;background:#f8f8f8;border-radius:8px;font-size:13px;color:#555;line-height:1.8">
-          <div style="font-weight:bold;margin-bottom:4px">使い方</div>
-          <div>1. Claudeでタスクシート画像を送る</div>
-          <div>2.「TaskBoard用JSONに変換して」と依頼</div>
-          <div>3. JSONをコピーしてこのアプリに貼り付ける</div>
-          <div>4. このURLをLINEでクルーに共有</div>
-        </div>
-      </div>`;
-    return;
-  }
-
-  if (state.screen === "upload") {
-    app.innerHTML = `
-      <div class="header">
-        <button class="btn-small" onclick="showScreen(state.data?'view':'home')">← 戻る</button>
-        <span>タスクシート読み込み</span><span></span>
-      </div>
-      <div class="wrap">
-        <div style="font-size:15px;font-weight:bold;margin-bottom:6px">📋 JSONを貼り付けて読み込む</div>
-        <div class="info">Claudeのチャットでタスクシート画像を送り<br>「<strong>TaskBoard用JSONに変換して</strong>」と依頼してください</div>
-        <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
-        <button class="btn btn-primary" style="margin-top:8px" onclick="loadJson()">JSONを読み込む</button>
-        <div style="display:flex;align-items:center;gap:8px;margin:16px 0">
-          <div style="flex:1;height:1px;background:#ddd"></div>
-          <span style="font-size:12px;color:#999">または</span>
-          <div style="flex:1;height:1px;background:#ddd"></div>
-        </div>
-        <div style="font-size:15px;font-weight:bold;margin-bottom:8px">🖼 原本画像を保存する</div>
-        <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
-        <button class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">
-          ${state.image ? '✅ 原本（保存済）' : '📂 原本画像を選択して保存'}
-        </button>
-        <div id="imageStatus" style="font-size:13px;color:#006600;margin-top:4px"></div>
-        ${renderSketchManager()}
-        <div id="uploadError"></div>
-      </div>`;
-    return;
-  }
-
-  if (state.screen === "image") {
-    app.innerHTML = `
-      <div class="header">
-        <button class="btn-small" onclick="showScreen('view')">← 戻る</button>
-        <span>原本タスクシート</span><span></span>
-      </div>
-      <div style="padding:8px">
-        ${state.image ? `<img src="${state.image}" alt="タスクシート原本">` : '<div class="loading">画像がありません</div>'}
-      </div>`;
-    return;
-  }
-
-  if (state.screen === "sketch") {
-    const taskNo = state.currentSketchTaskNo;
-    const imgData = state.sketchCache[taskNo];
-    app.innerHTML = `
-      <div class="header">
-        <button class="btn-small" onclick="showScreen('view')">← 戻る</button>
-        <span>Task#${taskNo} のスケッチ</span><span></span>
-      </div>
-      <div style="padding:8px">
-        ${imgData ? `<img src="${imgData}" alt="スケッチ">` : '<div class="loading">画像がありません</div>'}
-      </div>`;
-    return;
-  }
-
-  if (state.screen === "view" && state.data) {
-    const d = state.data;
-    let html = `
-      <div class="header">
-        <span>🎈 TaskBoard</span>
-        <div style="display:flex;gap:8px">
-          ${state.image ? `<button class="btn-small" onclick="showScreen('image')">原本</button>` : ""}
-          <button class="btn-small" onclick="showScreen('upload')">📋 入力</button>
-          <button class="btn-small" onclick="loadData()">↻ 同期</button>
-        </div>
-      </div>
-      <div class="wrap">
-        ${state.updatedAt ? `<div class="updated">最終更新: ${new Date(state.updatedAt).toLocaleString("ja-JP")}</div>` : ""}
-        ${renderBasicInfo(d.basicInfo)}
-        ${(d.tasks||[]).map((t,i) => renderTask(t,i)).join("")}
-        <div style="margin-top:32px;padding-top:16px;border-top:1px solid #ddd;text-align:center">
-          <button onclick="resetData()" style="background:none;border:1px solid #ccc;color:#aaa;padding:8px 20px;border-radius:6px;font-size:12px;cursor:pointer">データをリセット</button>
-        </div>
-        <div style="height:32px"></div>
-      </div>`;
-    app.innerHTML = html;
-    startTimers(d.tasks||[]);
-    return;
-  }
-
-  showScreen("home");
 }
 
-function renderBasicInfo(info) {
-  if (!info) return "";
-  const isOpen = state.open["basic"];
-  const rows = [
-    ["大会", info.CompetitionName], ["日付", info.date], ["離陸時間", info.launchPeriod], ["タスク順", info.taskOrder],
-    ["QNH", info.qnh], ["日の出/日の入", info.sunriseSunset], ["次回ブリーフィング", info.nextBriefing]
-  ].filter(([,v])=>v);
-  return `
-    <div class="card">
-      <div class="card-header" onclick="toggleOpen('basic')">
-        <span style="font-size:15px;font-weight:bold">📋 基本情報  ${info.date}</span>
-        <span style="font-size:18px;color:#888">${isOpen?"▲":"▼"}</span>
-      </div>
-      ${isOpen ? `<div class="card-body">
-        ${rows.map(([l,v])=>`<div class="row"><span class="row-label">${l}</span><span class="row-value">${v}</span></div>`).join("")}
-        ${info.launchReqmt?`<div style="padding:7px 0;border-bottom:1px solid #eee"><div style="font-size:14px;color:#666;margin-bottom:3px">Launch Reqmt</div><div style="font-size:14px;font-weight:bold">${info.launchReqmt}</div></div>`:""}
-        ${info.generalNotes?`<div class="notes">📝 ${info.generalNotes}</div>`:""}
-      </div>` : ""}
-    </div>`;
-}
-
-function renderTask(task, index) {
-  const isOpen = state.open["task"+index] !== false;
-  const isGMD = task.markerDrop?.toUpperCase().includes("GMD");
-  const mc = getColor(task.markerColor);
-  const tc = getColor(task.targetColor);
-  return `
-    <div class="card" style="${isGMD?"border:3px solid #cc0000":""}">
-      <div class="card-header" style="${isGMD?"background:#fff0f0":""}" onclick="toggleOpen('task${index}')">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="background:#222;color:#fff;border-radius:6px;padding:3px 10px;font-size:15px;font-weight:bold">${index+1} Task#${task.TaskNo}</span>
-          <span style="font-size:16px;font-weight:bold;color:${isGMD?"#cc0000":"#222"}">${task.type}</span>
-          <span style="font-size:14px;color:#555">${task.typeName||""}</span>
-          ${isGMD?'<span style="font-size:14px;font-weight:bold;color:#cc0000">🚨GMD</span>':""}
-        </div>
-        <span style="font-size:18px;color:#888;flex-shrink:0">${isOpen?"▲":"▼"}</span>
-      </div>
-      ${isOpen ? `<div class="card-body">
-        ${isGMD?'<div class="gmd-alert">🚨 GMD（重力落下）― 投げると距離ペナルティ！<br>両足をゴンドラに付けて落下させること</div>':""}
-        ${task.numberOfGoals?`<div class="row"><span class="row-label">宣言ゴール数</span><span class="row-value">${task.numberOfGoals} 個</span></div>`:""}
-        ${task.declarationMethod?`<div class="row"><span class="row-label">宣言方法</span><span class="row-value">${task.declarationMethod}</span></div>`:""}
-        ${task.markerColor?`<div class="row"><span class="row-label">マーカー色</span><span class="row-value" style="color:${mc.text}">● ${mc.label}（${task.markerColor}）</span></div>`:""}
-        ${task.targetColor?`<div class="row"><span class="row-label">ターゲット色</span><span class="row-value" style="color:${tc.text}">◎ ${tc.label}（${task.targetColor}）</span></div>`:""}
-        ${task.markerDrop?`<div class="row"><span class="row-label">マーカードロップ</span><span class="row-value" style="color:${isGMD?"#cc0000":"#222"};font-weight:${isGMD?"bold":"normal"}">${task.markerDrop}</span></div>`:""}
-        ${task.mma?`<div class="row"><span class="row-label">MMA</span><span class="row-value">${task.mma}</span></div>`:""}
-        ${task.loggerMarker?`<div class="row"><span class="row-label">ロガーマーカー</span><span class="row-value">📍 ${task.loggerMarker}</span></div>`:""}
-        ${task.targetGPS?`<div class="row"><span class="row-label">設定されたゴール／ターゲットの位置</span><span class="row-value">${task.targetGPS}</span></div>`:""}
-        ${task.scoringArea?`<div class="row"><span class="row-label">スコアリングエリア</span><span class="row-value">${task.scoringArea}</span></div>`:""}
-        ${task.scoringPeriodEnd?`
-          <div class="timer-box">
-            <div style="font-size:13px;color:#555;margin-bottom:4px">スコアリングピリオド終了</div>
-            <div style="font-size:24px;font-weight:bold;color:#222">🏁 ${task.scoringPeriodEnd}</div>
-            <div id="timer${index}" class="timer-display" style="background:#1a1a1a">--:--</div>
-          </div>`:""}
-        ${task.notes?`<div class="notes">📝 ${task.notes}</div>`:""}
-        <div style="border-top:1px solid #eee;margin-top:8px;padding-top:8px">
-          ${renderTaskSketch(task.TaskNo)}
-        </div>
-      </div>` : ""}
-    </div>`;
-}
-
-function startTimers(tasks) {
-  tasks.forEach((task, index) => {
-    if (!task.scoringPeriodEnd) return;
-    const el = document.getElementById("timer"+index);
-    if (!el) return;
-    const update = () => {
-      const now = new Date();
-      const [h,m] = task.scoringPeriodEnd.split(":").map(Number);
-      const end = new Date(now); end.setHours(h,m,0,0);
-      if (now >= end) {
-        el.textContent = "✅ スコアリングピリオド終了";
-        el.style.background = "#555";
-        el.style.fontSize = "15px";
-        el.style.letterSpacing = "0";
-        return;
-      }
-      const diff = Math.floor((end-now)/1000);
-      const hh=Math.floor(diff/3600), mm=Math.floor((diff%3600)/60), ss=diff%60;
-      const isW=diff<=900, isD=diff<=300;
-      el.textContent = (isD?"🚨":isW?"⚠️":"⏱")+" "+(hh>0?hh+":":"")+String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
-      el.style.background = isD?"#cc0000":isW?"#ff8800":"#1a1a1a";
-      el.style.fontSize = "22px";
-      el.style.letterSpacing = "2px";
-    };
-    update();
-    timers.push(setInterval(update, 1000));
-  });
-}
-
-function renderSketchManager() {
-  if (!state.data) return '';
-  var q = "'";
-  var html = '<div style="margin-top:20px"><div style="font-size:15px;font-weight:bold;margin-bottom:8px">📎 スケッチを管理する</div>';
-  (state.data.tasks || []).forEach(function(task) {
-    var no = task.TaskNo;
-    var has = state.sketchMap[no];
-    var icon = has ? '✅' : '📂';
-    var btns = has
-      ? '<button class="btn-small" onclick="showSketch(' + q + no + q + ')">見る</button>' +
-        '<button onclick="deleteSketch(' + q + no + q + ')" style="color:#cc0000;background:none;border:1px solid #cc0000;padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer">削除</button>'
-      : '<input type="file" id="sketchInput_' + no + '" accept="image/*" style="display:none" onchange="uploadSketch(this,' + q + no + q + ')">' +
-        '<button class="btn-small" onclick="document.getElementById(' + q + 'sketchInput_' + no + q + ').click()">追加</button>';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">' +
-      '<span style="font-size:14px">' + icon + ' Task#' + no + ' ' + (task.type || '') + '</span>' +
-      '<div style="display:flex;gap:6px;align-items:center">' + btns + '</div></div>';
-  });
-  html += '</div>';
-  return html;
-}
-
-function renderTaskSketch(taskNo) {
-  var q = "'";
-  if (state.sketchMap[taskNo]) {
-    return '<div style="background:#f8f8f8;border-radius:6px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between">' +
-      '<span style="font-size:14px">📎 スケッチ</span>' +
-      '<button class="btn-small" onclick="showSketch(' + q + taskNo + q + ')">見る</button></div>';
-  }
-  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
-    '<span style="color:#aaa;font-size:13px">📎 スケッチなし</span>' +
-    '<button onclick="showScreen(' + q + 'upload' + q + ')" style="background:none;border:none;color:#0066cc;font-size:13px;cursor:pointer;padding:0">追加</button></div>';
-}
-
-function toggleOpen(key) {
-  state.open[key] = key === "basic" ? !state.open[key] : (state.open[key] === false ? true : false);
-  render();
-}
-
-function showScreen(screen) { state.screen = screen; render(); }
-
-function loadJson() {
-  const input = document.getElementById("jsonInput").value;
-  const errEl = document.getElementById("uploadError");
-  try {
-    const m = input.replace(/`{3}json|`{3}/g,"").trim().match(/\{[\s\S]*\}/);
-    if (!m) throw new Error("JSONの形式が正しくありません");
-    const parsed = JSON.parse(m[0]);
-    if (!parsed.tasks) throw new Error("tasksが見つかりません");
-    errEl.innerHTML = '<div class="info">保存中...</div>';
-    google.script.run
-      .withSuccessHandler(() => { state.data = parsed; state.screen = "view"; render(); })
-      .withFailureHandler((e) => { errEl.innerHTML = `<div class="error">保存に失敗: ${e.message}</div>`; })
-      .saveTaskData(JSON.stringify(parsed));
-  } catch(e) { errEl.innerHTML = `<div class="error">エラー: ${e.message}</div>`; }
-}
-
-function loadData() {
-  state.screen = "loading"; render();
-  const fallback = setTimeout(() => {
-    if (state.screen === "loading") { state.screen = "home"; render(); }
-  }, 10000);
+function refresh() {
   google.script.run
-    .withSuccessHandler((result) => {
-      clearTimeout(fallback);
-      try {
-        if (result && result.data) {
-          state.data = JSON.parse(result.data);
-          state.updatedAt = result.updatedAt;
-          state.image = result.image || null;
-          state.sketchMap = result.sketchMap || {};
-          state.screen = "view";
-        } else {
-          state.screen = "home";
-        }
-      } catch(e) { state.screen = "home"; }
-      render();
+    .withSuccessHandler(function (s) { adminState = s; renderState(); })
+    .withFailureHandler(function (e) { msg('jsonMsg', '状態の取得に失敗: ' + e.message, 'err'); })
+    .getAdminState();
+}
+
+function renderShare() {
+  var url = shareUrl();
+  document.getElementById('shareUrl').textContent = url || '（URLを取得できませんでした）';
+  var a = document.getElementById('openApp');
+  if (url) { a.href = url; a.style.display = ''; } else { a.style.display = 'none'; }
+}
+
+function renderState() {
+  var s = adminState;
+  EXEC_URL = s.execUrl || '';
+  APP_URL = s.appUrl || '';
+  renderShare();
+
+  document.getElementById('imageStatus').textContent =
+    s.hasImage ? '✅ 保存済み' : '未登録';
+
+  var list = document.getElementById('sketchList');
+  if (!s.tasks.length) {
+    list.innerHTML = '<div class="status">先にタスクシートを登録してください。</div>';
+  } else {
+    list.innerHTML = s.tasks.map(function (t) {
+      var has = s.sketchTaskNos.indexOf(t.taskNo) >= 0;
+      var no = JSON.stringify(t.taskNo);
+      var btns = has
+        ? '<button class="btn-danger-outline" onclick="delSketch(' + no + ')">削除</button>'
+        : '<input type="file" id="sk_' + t.taskNo + '" accept="image/*" style="display:none" ' +
+          'onchange="upSketch(this,' + no + ')">' +
+          '<button class="btn-small" onclick="document.getElementById(\'sk_' + t.taskNo + '\').click()">追加</button>';
+      return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + t.taskNo +
+        ' <b>' + t.taskId + '</b> <span class="status">' + t.name + '</span></span><span>' + btns + '</span></div>';
+    }).join('');
+  }
+
+  if (s.hasData && s.updatedAt) {
+    msg('jsonMsg', '登録済み（' + s.tasks.length + 'タスク）  最終更新: ' +
+      new Date(s.updatedAt).toLocaleString('ja-JP'), 'info');
+  }
+}
+
+function saveJson() {
+  var input = document.getElementById('jsonInput').value;
+  try {
+    var m = input.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('JSONが見つかりません');
+    var parsed = JSON.parse(m[0]);
+    if (!parsed.tasks) throw new Error('tasks が含まれていません');
+  } catch (e) {
+    msg('jsonMsg', 'エラー: ' + e.message, 'err');
+    return;
+  }
+  msg('jsonMsg', '保存中…', 'info');
+  google.script.run
+    .withSuccessHandler(function (r) {
+      msg('jsonMsg', '✅ 登録しました（' + r.taskCount + 'タスク）。クルーがアプリで「↻」すると反映されます。', 'ok');
+      refresh();
     })
-    .withFailureHandler((e) => {
-      clearTimeout(fallback);
-      alert("読み込みエラー: " + e.message);
-      state.screen = "home"; render();
-    })
-    .getTaskData();
+    .withFailureHandler(function (e) { msg('jsonMsg', '保存に失敗: ' + e.message, 'err'); })
+    .saveTaskData(JSON.stringify(parsed));
 }
 
 function compressImage(file, callback) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    var img = new Image();
+    img.onload = function () {
+      var canvas = document.createElement('canvas');
+      var scale = Math.min(1, 1200 / Math.max(img.width, img.height));
       canvas.width = Math.floor(img.width * scale);
       canvas.height = Math.floor(img.height * scale);
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(img,0,0,canvas.width,canvas.height);
-      callback(canvas.toDataURL("image/jpeg", 0.7));
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      callback(canvas.toDataURL('image/jpeg', 0.72));
     };
     img.src = e.target.result;
   };
@@ -372,77 +199,48 @@ function compressImage(file, callback) {
 }
 
 function uploadImage(input) {
-  const file = input.files[0]; if (!file) return;
-  const statusEl = document.getElementById("imageStatus");
-  statusEl.textContent = "圧縮中...";
-  compressImage(file, (compressed) => {
-    statusEl.textContent = "保存中...";
+  var file = input.files[0];
+  if (!file) return;
+  msg('imageMsg', '圧縮中…', 'info');
+  compressImage(file, function (data) {
+    msg('imageMsg', '保存中…', 'info');
     google.script.run
-      .withSuccessHandler(() => { state.image = compressed; statusEl.textContent = "✅ 原本画像を保存しました"; render(); })
-      .withFailureHandler((e) => { statusEl.textContent = "❌ 保存失敗: " + e.message; })
-      .saveImageData(compressed);
+      .withSuccessHandler(function () { msg('imageMsg', '✅ 保存しました', 'ok'); refresh(); })
+      .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); })
+      .saveImageData(data);
   });
 }
 
-function showSketch(taskNo) {
-  state.currentSketchTaskNo = taskNo;
-  if (state.sketchCache[taskNo]) {
-    state.screen = "sketch";
-    render();
-    return;
-  }
-  state.screen = "loading";
-  render();
-  google.script.run
-    .withSuccessHandler((data) => {
-      state.sketchCache[taskNo] = data;
-      state.screen = "sketch";
-      render();
-    })
-    .withFailureHandler((e) => {
-      alert("スケッチ取得エラー: " + e.message);
-      state.screen = "view";
-      render();
-    })
-    .getSketchData(taskNo);
-}
-
-function uploadSketch(input, taskNo) {
-  const file = input.files[0]; if (!file) return;
-  compressImage(file, (compressed) => {
+function upSketch(input, taskNo) {
+  var file = input.files[0];
+  if (!file) return;
+  msg('sketchMsg', 'Task ' + taskNo + ' を保存中…', 'info');
+  compressImage(file, function (data) {
     google.script.run
-      .withSuccessHandler(() => {
-        state.sketchMap[taskNo] = true;
-        state.sketchCache[taskNo] = compressed;
-        render();
-      })
-      .withFailureHandler((e) => { alert("スケッチ保存失敗: " + e.message); })
-      .saveSketchData(taskNo, compressed);
+      .withSuccessHandler(function () { msg('sketchMsg', '✅ Task ' + taskNo + ' のスケッチを保存しました', 'ok'); refresh(); })
+      .withFailureHandler(function (e) { msg('sketchMsg', '保存に失敗: ' + e.message, 'err'); })
+      .saveSketchData(taskNo, data);
   });
 }
 
-function deleteSketch(taskNo) {
-  if (!confirm(`Task#${taskNo} のスケッチを削除しますか？`)) return;
+function delSketch(taskNo) {
+  if (!confirm('Task ' + taskNo + ' のスケッチを削除しますか？')) return;
   google.script.run
-    .withSuccessHandler(() => {
-      state.sketchMap[taskNo] = false;
-      state.sketchCache[taskNo] = null;
-      render();
-    })
-    .withFailureHandler((e) => { alert("削除失敗: " + e.message); })
+    .withSuccessHandler(function () { msg('sketchMsg', 'Task ' + taskNo + ' のスケッチを削除しました', 'ok'); refresh(); })
+    .withFailureHandler(function (e) { msg('sketchMsg', '削除に失敗: ' + e.message, 'err'); })
     .deleteSketchData(taskNo);
 }
 
-function resetData() {
-  if (!confirm("本当にリセットしますか？\n競技中は操作しないでください。")) return;
-  if (!confirm("最終確認：リセットを実行しますか？")) return;
+function resetAll() {
+  if (!confirm('本当にリセットしますか？\n競技中は操作しないでください。')) return;
+  if (!confirm('最終確認：すべてのデータを消します。')) return;
   google.script.run
-    .withSuccessHandler(() => { state.data = null; state.image = null; state.sketchMap = {}; state.sketchCache = {}; state.screen = "home"; render(); })
-    .withFailureHandler((e) => { alert("リセット失敗: " + e.message); })
+    .withSuccessHandler(function () { msg('resetMsg', 'リセットしました', 'ok'); refresh(); })
+    .withFailureHandler(function (e) { msg('resetMsg', 'リセットに失敗: ' + e.message, 'err'); })
     .resetTaskData();
 }
 
-window.onload = () => loadData();
+refresh();
 </script>
 </body>
 </html>
