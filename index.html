@@ -21,6 +21,9 @@ h2:first-of-type { margin-top:6px; }
 .btn-ghost { background:none; border:1px solid #ddd; color:#aaa; padding:9px 18px; border-radius:7px; font-size:12px; cursor:pointer; }
 textarea { width:100%; min-height:150px; padding:11px; border-radius:9px; border:2px solid #ccc; font-size:12px; font-family:ui-monospace,Menlo,monospace; resize:vertical; outline:none; }
 textarea:focus { border-color:#1a1a1a; }
+input[type=text] { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; outline:none; }
+input[type=text]:focus { border-color:#1a1a1a; }
+label.field { display:block; font-size:12px; font-weight:bold; color:#555; margin:10px 0 4px; }
 .share { background:#f6f6f6; border-radius:10px; padding:12px; font-size:12px; word-break:break-all; }
 .share code { display:block; background:#fff; border:1px solid #e0e0e0; border-radius:6px; padding:8px; margin:6px 0; font-size:11px; }
 .hint { font-size:12px; color:#6b6b6b; line-height:1.75; margin-top:6px; }
@@ -31,6 +34,14 @@ textarea:focus { border-color:#1a1a1a; }
 .msg.err { background:#fff1f1; color:#cc0000; }
 .msg.info { background:#eef3ff; color:#1a3a7a; }
 .status { font-size:13px; color:#6b6b6b; }
+.flight-card { border:2px solid #1a1a1a; border-radius:10px; padding:11px 13px; margin-bottom:9px; }
+.flight-card.editing { border-color:#0066cc; background:#f2f7ff; }
+.flight-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.flight-label { font-size:15px; font-weight:bold; }
+.flight-sub { font-size:12px; color:#777; margin-top:2px; }
+.flight-actions { display:flex; gap:6px; flex-shrink:0; }
+.flight-empty { text-align:center; padding:30px 10px; color:#999; font-size:13px; }
+select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; background:#fff; }
 </style>
 </head>
 <body>
@@ -51,17 +62,30 @@ textarea:focus { border-color:#1a1a1a; }
   <div class="hint">
     閲覧アプリ側の <b>config.js</b> に上の <code style="display:inline;padding:1px 4px">/exec</code> URL を書いてコミットしておくと、
     <code style="display:inline;padding:1px 4px">?api=</code> 無しの短いURLでも開けるようになります。
+    フライトはクルー側アプリ内で切り替えるので、フライトごとにURLを配り直す必要はありません。
   </div>
 
-  <h2>2. タスクシートを登録する</h2>
+  <h2>2. フライトを登録する</h2>
   <div class="hint" style="margin-top:0">
-    Claudeにタスクシート画像を送り「<b>TaskBoard用JSONに変換して</b>」と依頼 → 出てきたJSONを貼り付け。
+    Claudeにタスクシート画像を送り「<b>TaskBoard用JSONに変換して</b>」と依頼 → 出てきたJSONを貼り付け。<br>
+    新しいフライトのつもりで登録すると一覧に追加され、既存フライトを選んで登録すると訂正として上書きされます。
   </div>
+  <label class="field">対象フライト</label>
+  <select id="flightSelect" onchange="onSelectFlight()">
+    <option value="">＋ 新しいフライトとして登録</option>
+  </select>
+  <label class="field">ラベル（空なら自動で付けます。例: Flight 3 (#8-#12)）</label>
+  <input type="text" id="labelInput" placeholder="Flight 3 (#8-#12)">
+  <label class="field">JSON</label>
   <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
   <button class="btn btn-primary" style="margin-top:9px" onclick="saveJson()">登録して全クルーに反映</button>
   <div id="jsonMsg"></div>
 
-  <h2>3. 原本タスクシート画像</h2>
+  <h2>3. 登録済みフライト</h2>
+  <div id="flightList"><div class="status">確認中…</div></div>
+
+  <h2>4. 原本タスクシート画像</h2>
+  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。</div>
   <div class="row">
     <span id="imageStatus" class="status">確認中…</span>
     <div>
@@ -71,13 +95,14 @@ textarea:focus { border-color:#1a1a1a; }
   </div>
   <div id="imageMsg"></div>
 
-  <h2>4. タスク別スケッチ</h2>
+  <h2>5. タスク別スケッチ</h2>
+  <div class="hint" style="margin-top:0">タスク番号は大会全体で一意なので、フライトをまたいで一覧表示します。</div>
   <div id="sketchList"><div class="status">確認中…</div></div>
   <div id="sketchMsg"></div>
 
-  <h2>5. リセット</h2>
-  <div class="hint" style="margin-top:0">タスクシート・原本画像・スケッチをすべて消します。競技中は操作しないでください。</div>
-  <button class="btn-ghost" style="margin-top:8px" onclick="resetAll()">データをリセット</button>
+  <h2>6. 大会全体のリセット</h2>
+  <div class="hint" style="margin-top:0">すべてのフライト・原本画像・スケッチを消します。競技中は操作しないでください。</div>
+  <button class="btn-ghost" style="margin-top:8px" onclick="resetAll()">すべてリセット</button>
   <div id="resetMsg"></div>
 
   <div style="height:40px"></div>
@@ -88,6 +113,7 @@ textarea:focus { border-color:#1a1a1a; }
 var EXEC_URL = '';
 var APP_URL = '';
 var adminState = null;
+var editingKey = ''; // '' = 新規登録
 
 function shareUrl() {
   if (!APP_URL) return '';
@@ -98,6 +124,11 @@ function msg(id, text, kind) {
   document.getElementById(id).innerHTML = text
     ? '<div class="msg ' + (kind || 'info') + '">' + text + '</div>'
     : '';
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function copyShare() {
@@ -125,20 +156,68 @@ function renderShare() {
   if (url) { a.href = url; a.style.display = ''; } else { a.style.display = 'none'; }
 }
 
+function currentFlight() {
+  if (!adminState) return null;
+  for (var i = 0; i < adminState.flights.length; i++) {
+    if (adminState.flights[i].key === editingKey) return adminState.flights[i];
+  }
+  return null;
+}
+
 function renderState() {
   var s = adminState;
   EXEC_URL = s.execUrl || '';
   APP_URL = s.appUrl || '';
   renderShare();
 
-  document.getElementById('imageStatus').textContent =
-    s.hasImage ? '✅ 保存済み' : '未登録';
+  // フライト選択セレクト
+  var sel = document.getElementById('flightSelect');
+  var keepValue = sel.value;
+  sel.innerHTML = '<option value="">＋ 新しいフライトとして登録</option>' +
+    s.flights.map(function (f) {
+      return '<option value="' + esc(f.key) + '">' + esc(f.label) + '</option>';
+    }).join('');
+  sel.value = s.flights.some(function (f) { return f.key === keepValue; }) ? keepValue : '';
+  editingKey = sel.value;
 
-  var list = document.getElementById('sketchList');
-  if (!s.tasks.length) {
-    list.innerHTML = '<div class="status">先にタスクシートを登録してください。</div>';
+  var img = currentFlight();
+  document.getElementById('imageStatus').textContent =
+    !editingKey ? '（フライトを選ぶと表示されます）' : (img && img.hasImage ? '✅ 保存済み' : '未登録');
+
+  // フライト一覧
+  var list = document.getElementById('flightList');
+  if (!s.flights.length) {
+    list.innerHTML = '<div class="flight-empty">まだフライトが登録されていません。上のフォームから登録してください。</div>';
   } else {
-    list.innerHTML = s.tasks.map(function (t) {
+    list.innerHTML = s.flights.map(function (f) {
+      var updated = f.updatedAt ? new Date(f.updatedAt).toLocaleString('ja-JP') : '-';
+      return '<div class="flight-card' + (f.key === editingKey ? ' editing' : '') + '">' +
+        '<div class="flight-head">' +
+          '<div><div class="flight-label">' + esc(f.label) + '</div>' +
+          '<div class="flight-sub">' + esc(f.date || '') + '　' + f.taskCount + 'タスク　更新: ' + esc(updated) + '</div></div>' +
+          '<div class="flight-actions">' +
+            '<button class="btn-small" onclick="editFlight(' + JSON.stringify(f.key) + ')">編集</button>' +
+            '<button class="btn-danger-outline" onclick="deleteFlight(' + JSON.stringify(f.key) + ',' + JSON.stringify(f.label) + ')">削除</button>' +
+          '</div>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  // スケッチ一覧（全フライト分のタスクをまとめて重複排除）
+  var seen = {};
+  var allTasks = [];
+  s.flights.forEach(function (f) {
+    (f.tasks || []).forEach(function (t) {
+      if (seen[t.taskNo]) return;
+      seen[t.taskNo] = true;
+      allTasks.push(t);
+    });
+  });
+  var skList = document.getElementById('sketchList');
+  if (!allTasks.length) {
+    skList.innerHTML = '<div class="status">先にフライトを登録してください。</div>';
+  } else {
+    skList.innerHTML = allTasks.map(function (t) {
       var has = s.sketchTaskNos.indexOf(t.taskNo) >= 0;
       var no = JSON.stringify(t.taskNo);
       var btns = has
@@ -146,36 +225,59 @@ function renderState() {
         : '<input type="file" id="sk_' + t.taskNo + '" accept="image/*" style="display:none" ' +
           'onchange="upSketch(this,' + no + ')">' +
           '<button class="btn-small" onclick="document.getElementById(\'sk_' + t.taskNo + '\').click()">追加</button>';
-      return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + t.taskNo +
-        ' <b>' + t.taskId + '</b> <span class="status">' + t.name + '</span></span><span>' + btns + '</span></div>';
+      return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + esc(t.taskNo) +
+        ' <b>' + esc(t.taskId) + '</b> <span class="status">' + esc(t.name) + '</span></span><span>' + btns + '</span></div>';
     }).join('');
   }
+}
 
-  if (s.hasData && s.updatedAt) {
-    msg('jsonMsg', '登録済み（' + s.tasks.length + 'タスク）  最終更新: ' +
-      new Date(s.updatedAt).toLocaleString('ja-JP'), 'info');
-  }
+function onSelectFlight() {
+  editingKey = document.getElementById('flightSelect').value;
+  document.getElementById('labelInput').value = '';
+  document.getElementById('jsonInput').value = '';
+  var img = currentFlight();
+  document.getElementById('imageStatus').textContent =
+    !editingKey ? '（フライトを選ぶと表示されます）' : (img && img.hasImage ? '✅ 保存済み' : '未登録');
+}
+
+function editFlight(key) {
+  document.getElementById('flightSelect').value = key;
+  onSelectFlight();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  msg('jsonMsg', 'このフライトのJSONを貼り付けて「登録して全クルーに反映」を押すと上書きされます。', 'info');
 }
 
 function saveJson() {
   var input = document.getElementById('jsonInput').value;
+  var parsed;
   try {
     var m = input.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
     if (!m) throw new Error('JSONが見つかりません');
-    var parsed = JSON.parse(m[0]);
+    parsed = JSON.parse(m[0]);
     if (!parsed.tasks) throw new Error('tasks が含まれていません');
   } catch (e) {
     msg('jsonMsg', 'エラー: ' + e.message, 'err');
     return;
   }
+  var label = document.getElementById('labelInput').value.trim();
   msg('jsonMsg', '保存中…', 'info');
   google.script.run
     .withSuccessHandler(function (r) {
-      msg('jsonMsg', '✅ 登録しました（' + r.taskCount + 'タスク）。クルーがアプリで「↻」すると反映されます。', 'ok');
+      msg('jsonMsg', '✅ 「' + r.label + '」を登録しました（' + r.taskCount + 'タスク）。クルーがアプリで「↻」すると反映されます。', 'ok');
+      document.getElementById('flightSelect').value = r.key;
+      onSelectFlight();
       refresh();
     })
     .withFailureHandler(function (e) { msg('jsonMsg', '保存に失敗: ' + e.message, 'err'); })
-    .saveTaskData(JSON.stringify(parsed));
+    .saveFlight(editingKey, label, JSON.stringify(parsed));
+}
+
+function deleteFlight(key, label) {
+  if (!confirm('「' + label + '」を削除しますか？\nクルー側でも見られなくなります。')) return;
+  google.script.run
+    .withSuccessHandler(function () { msg('jsonMsg', '「' + label + '」を削除しました', 'ok'); refresh(); })
+    .withFailureHandler(function (e) { msg('jsonMsg', '削除に失敗: ' + e.message, 'err'); })
+    .deleteFlight(key);
 }
 
 function compressImage(file, callback) {
@@ -201,13 +303,14 @@ function compressImage(file, callback) {
 function uploadImage(input) {
   var file = input.files[0];
   if (!file) return;
+  if (!editingKey) { msg('imageMsg', '先にフライトを選んでください', 'err'); return; }
   msg('imageMsg', '圧縮中…', 'info');
   compressImage(file, function (data) {
     msg('imageMsg', '保存中…', 'info');
     google.script.run
       .withSuccessHandler(function () { msg('imageMsg', '✅ 保存しました', 'ok'); refresh(); })
       .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveImageData(data);
+      .saveImageData(editingKey, data);
   });
 }
 
@@ -233,11 +336,11 @@ function delSketch(taskNo) {
 
 function resetAll() {
   if (!confirm('本当にリセットしますか？\n競技中は操作しないでください。')) return;
-  if (!confirm('最終確認：すべてのデータを消します。')) return;
+  if (!confirm('最終確認：すべてのフライトを消します。')) return;
   google.script.run
     .withSuccessHandler(function () { msg('resetMsg', 'リセットしました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('resetMsg', 'リセットに失敗: ' + e.message, 'err'); })
-    .resetTaskData();
+    .resetAllData();
 }
 
 refresh();

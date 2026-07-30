@@ -55,6 +55,28 @@ button { font: inherit; cursor: pointer; }
 }
 .btn-small.light { background: #ececec; color: #1a1a1a; }
 
+/* ---------- flight bar ---------- */
+.flight-bar {
+  position: sticky; top: 41px; z-index: 40;
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 8px 10px; background: #2a2a2a; border-bottom: 1px solid #3a3a3a;
+  -webkit-overflow-scrolling: touch;
+}
+.flight-bar::-webkit-scrollbar { display: none; }
+.flight-chip {
+  position: relative; flex-shrink: 0;
+  background: #3d3d3d; color: #d8d8d8; border: 1px solid #4a4a4a;
+  padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.flight-chip.active { background: #fff; color: #1a1a1a; border-color: #fff; }
+.flight-chip.pending { opacity: 0.55; }
+.flight-chip.pending::after { content: ' ⋯'; font-weight: 400; }
+.flight-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger); margin-right: 5px; vertical-align: middle;
+}
+
 /* ---------- layout ---------- */
 .wrap { padding: 14px; max-width: 680px; margin: 0 auto; }
 .stack > * + * { margin-top: 12px; }
