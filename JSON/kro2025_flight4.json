@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "_source": "実物のタスクデータシート（XXV Krosno IMBC, Pre Worlds 2025, Flight 4, Task #13）をそのまま起こしたもの。",
+  "basicInfo": {
+    "competitionName": "XXV Górskie Zawody Balonowe Krosno 2025 (Pre Worlds)",
+    "date": "02.05.2025 PM",
+    "fields": [
+      { "label": "Flight", "value": "4" },
+      { "label": "Tasks", "value": "#13" },
+      { "label": "Launch area", "value": "within 500m of CLP2" },
+      { "label": "Launch period", "value": "17:45 - 18:10 (see WhatsApp)" },
+      { "label": "PZs in force", "value": "all active" },
+      { "label": "Solo flight", "value": "not required" },
+      { "label": "Sunrise/Sunset", "value": "05:10 / 19:50" },
+      { "label": "Min. ILP → all goals", "value": "-" },
+      { "label": "Next briefing", "value": "02.05.2025 04:30" },
+      { "label": "QNH", "value": "1015" }
+    ]
+  },
+  "tasks": [
+    {
+      "taskNo": "13",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "mma": "3D only",
+      "scoringPeriodEnd": "18:50:00",
+      "scoringArea": "entire contest area",
+      "notes": "Result will be the 3D distance.",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Position of various set goals/targets", "value": "Any goal coordinate from the official goal list, between 3km and 6km from CLP2. Goal is at 2000ft." }
+      ],
+      "loggerMarker": "1"
+    }
+  ]
+}

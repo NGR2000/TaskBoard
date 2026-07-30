@@ -6,22 +6,27 @@
  *     ラベルは辞書で日本語化し、辞書に無いラベルも英語のまま必ず表示する。
  *  3. 日本語を大きく、英語を小さく併記。クルーは日本語で読み、
  *     パイロットは原本や審判と英語で突き合わせできる。
+ *  4. 複数フライトを同時に保持する。大会中はフライトが進むごとに新しい
+ *     タスクデータシートが発表されるが、直前のフライトを上書きせず、
+ *     クルーはヘッダー下のバーでいつでも過去のフライトへ切り替えて見られる。
  */
 (function () {
   'use strict';
 
-  var APP_VERSION = '2.0.0';
+  var APP_VERSION = '3.0.0';
   var LS = {
-    data: 'tb.data',
-    updatedAt: 'tb.updatedAt',
     api: 'tb.api',
+    flightsIndex: 'tb.flights.index',
+    activeFlight: 'tb.activeFlight',
     sketchIdx: 'tb.sketchTaskNos',
-    hasImage: 'tb.hasImage',
-    image: 'tb.image',
-    sketchPrefix: 'tb.sketch.',
-    lastSync: 'tb.lastSync'
+    lastSync: 'tb.lastSync',
+    flightPrefix: 'tb.flight.',      // + key  -> { data, updatedAt }
+    lastViewedPrefix: 'tb.lastViewed.', // + key -> ISO timestamp
+    imagePrefix: 'tb.image.',        // + key
+    sketchPrefix: 'tb.sketch.'       // + taskNo
   };
   var CFG = window.TASKBOARD_CONFIG || {};
+  var LOCAL_KEY = '__local__';
 
   // =======================================================================
   // state
@@ -30,24 +35,22 @@
     screen: 'view',
     booted: false,
     apiUrl: '',
-    raw: null,
-    data: null,
-    updatedAt: null,
-    lastSync: null,
-    sketchTaskNos: [],
-    hasImage: false,
+    flights: [],       // [{key,label,date,updatedAt,taskCount,hasImage}]
+    flightData: {},    // key -> { raw, data, updatedAt }
+    activeFlight: '',
     image: null,
+    sketchTaskNos: [],
     sketchCache: {},
     currentSketch: null,
     open: {},
     syncing: false,
     syncError: null,
-    emptyOnServer: false,
     online: navigator.onLine,
     dict: null,
     rules: null,
     modal: null,
-    localError: null
+    localError: null,
+    lastSync: null
   };
   var timers = [];
 
@@ -60,7 +63,10 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function isBlank(v) {
-    return v === null || v === undefined || String(v).trim() === '';
+    if (v === null || v === undefined) return true;
+    var s = String(v).trim();
+    // タスクシートでは「該当なし」の意味で "-" 単独がよく使われる（実データで確認）
+    return s === '' || /^[-–—]+$/.test(s);
   }
   function el(id) { return document.getElementById(id); }
 
@@ -126,14 +132,14 @@
     return { ja: value, en: null, known: false, color: colorOf(value) };
   }
 
-  /** 値の中に色名が含まれていれば色コードを返す（●の色付け用） */
+  /** 単語単位の完全一致でのみ色を拾う。部分文字列一致だと "declared" が
+   *  "red" を内包するなどの誤爆が起きる（長文の説明文で実際に発生した）。 */
   function colorOf(value) {
-    var k = normKey(value);
-    if (!k) return null;
-    var names = Object.keys(valueMap);
-    for (var i = 0; i < names.length; i++) {
-      var entry = valueMap[names[i]];
-      if (entry.color && k.indexOf(names[i]) >= 0) return entry.color;
+    if (!value) return null;
+    var words = String(value).toLowerCase().replace(/colour/g, 'color').split(/[^a-z0-9]+/);
+    for (var i = 0; i < words.length; i++) {
+      var entry = words[i] && valueMap[words[i]];
+      if (entry && entry.color) return entry.color;
     }
     return null;
   }
@@ -387,25 +393,81 @@
   }
 
   // =======================================================================
+  // フライトのキャッシュ
+  // =======================================================================
+  function flightLSKey(key) { return LS.flightPrefix + key; }
+  function lastViewedLSKey(key) { return LS.lastViewedPrefix + key; }
+
+  function saveFlightCache(key, dataStr, updatedAt) {
+    safeSet(flightLSKey(key), JSON.stringify({ data: dataStr, updatedAt: updatedAt || '' }));
+  }
+  function loadFlightCache(key) {
+    var raw = safeGet(flightLSKey(key));
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  function markViewed(key) { safeSet(lastViewedLSKey(key), new Date().toISOString()); }
+  function isNewFlight(meta) {
+    if (meta.key === LOCAL_KEY) return false;
+    var seen = safeGet(lastViewedLSKey(meta.key));
+    if (!seen) return true;
+    if (!meta.updatedAt) return false;
+    var seenTime = new Date(seen).getTime();
+    var updTime = new Date(meta.updatedAt).getTime();
+    return isFinite(updTime) && isFinite(seenTime) && updTime > seenTime;
+  }
+
+  function pickActiveFlight() {
+    if (state.activeFlight && state.flights.some(function (f) { return f.key === state.activeFlight; })) return;
+    state.activeFlight = state.flights.length ? state.flights[state.flights.length - 1].key : '';
+  }
+
+  function restoreFromCache() {
+    try { state.flights = JSON.parse(safeGet(LS.flightsIndex) || '[]'); } catch (e) { state.flights = []; }
+    state.activeFlight = safeGet(LS.activeFlight) || '';
+    state.lastSync = safeGet(LS.lastSync) || null;
+    try { state.sketchTaskNos = JSON.parse(safeGet(LS.sketchIdx) || '[]'); }
+    catch (e) { state.sketchTaskNos = []; }
+
+    state.flights.forEach(function (f) {
+      var cached = loadFlightCache(f.key);
+      if (!cached) return;
+      try {
+        var raw = JSON.parse(cached.data);
+        state.flightData[f.key] = { raw: raw, data: normalizeData(raw), updatedAt: cached.updatedAt };
+      } catch (e) { /* 壊れたキャッシュは無視 */ }
+    });
+    pickActiveFlight();
+    if (state.activeFlight) markViewed(state.activeFlight);
+  }
+
+  // =======================================================================
   // 同期
   // =======================================================================
-  function applyServerData(res) {
-    if (res.data) {
-      safeSet(LS.data, res.data);
-      safeSet(LS.updatedAt, res.updatedAt || '');
-      state.raw = JSON.parse(res.data);
-      state.data = normalizeData(state.raw);
-      state.updatedAt = res.updatedAt || null;
-      state.emptyOnServer = false;
-    } else {
-      state.emptyOnServer = true;
-    }
-    state.sketchTaskNos = res.sketchTaskNos || [];
-    state.hasImage = !!res.hasImage;
-    safeSet(LS.sketchIdx, JSON.stringify(state.sketchTaskNos));
-    safeSet(LS.hasImage, state.hasImage ? '1' : '');
-    state.lastSync = new Date().toISOString();
-    safeSet(LS.lastSync, state.lastSync);
+  function fetchFlight(key) {
+    return apiGet('flight', { key: key })
+      .then(function (res) {
+        if (!res || res.ok === false || !res.data) return;
+        saveFlightCache(key, res.data, res.updatedAt);
+        var raw = JSON.parse(res.data);
+        state.flightData[key] = { raw: raw, data: normalizeData(raw), updatedAt: res.updatedAt };
+        render();
+      })
+      .catch(function () { /* このフライトだけ失敗。他のフライトの取得は続ける */ });
+  }
+
+  /** 一覧取得後、表示中のフライトを優先しつつ残りも裏で取りに行く */
+  function prefetchFlights() {
+    var keys = state.flights.map(function (f) { return f.key; });
+    keys.sort(function (a) { return a === state.activeFlight ? -1 : 1; });
+    var chain = Promise.resolve();
+    keys.forEach(function (key) {
+      var meta = state.flights.filter(function (f) { return f.key === key; })[0];
+      var cached = state.flightData[key];
+      if (cached && meta && cached.updatedAt === meta.updatedAt) return; // 変化なし
+      chain = chain.then(function () { return fetchFlight(key); });
+    });
+    return chain;
   }
 
   function sync() {
@@ -413,26 +475,50 @@
     state.syncing = true;
     state.syncError = null;
     render();
-    return apiGet('data')
+    return apiGet('flights')
       .then(function (res) {
         if (!res || res.ok === false) throw new Error((res && res.error) || 'サーバーがエラーを返しました');
-        applyServerData(res);
+        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; });
+        state.sketchTaskNos = res.sketchTaskNos || [];
+        safeSet(LS.flightsIndex, JSON.stringify(state.flights));
+        safeSet(LS.sketchIdx, JSON.stringify(state.sketchTaskNos));
+        state.lastSync = new Date().toISOString();
+        safeSet(LS.lastSync, state.lastSync);
+        pickActiveFlight();
+        safeSet(LS.activeFlight, state.activeFlight);
+        state.syncing = false;
+        render();
+        return prefetchFlights();
       })
-      .catch(function (e) { state.syncError = e.message || String(e); })
-      .then(function () { state.syncing = false; render(); });
+      .catch(function (e) {
+        state.syncError = e.message || String(e);
+        state.syncing = false;
+        render();
+      });
+  }
+
+  function switchFlight(key) {
+    state.activeFlight = key;
+    safeSet(LS.activeFlight, key);
+    markViewed(key);
+    state.open = {};
+    state.screen = 'view';
+    render();
+    if (!state.flightData[key] && state.online && key !== LOCAL_KEY) fetchFlight(key);
   }
 
   function loadImage() {
+    var key = state.activeFlight;
     if (state.image) { state.screen = 'image'; render(); return; }
-    var cached = safeGet(LS.image);
+    var cached = safeGet(LS.imagePrefix + key);
     if (cached) { state.image = cached; state.screen = 'image'; render(); return; }
     state.screen = 'image';
     state.syncing = true;
     render();
-    apiGet('image')
+    apiGet('image', { key: key })
       .then(function (res) {
         state.image = (res && res.image) || null;
-        if (state.image) safeSet(LS.image, state.image);
+        if (state.image) safeSet(LS.imagePrefix + key, state.image);
       })
       .catch(function (e) { state.syncError = e.message || String(e); })
       .then(function () { state.syncing = false; render(); });
@@ -475,7 +561,8 @@
     }
     app.innerHTML = html;
     renderModal();
-    if (state.screen === 'view' && state.data) startTimers(state.data.tasks);
+    var entry = state.flightData[state.activeFlight];
+    if (state.screen === 'view' && entry && entry.data) startTimers(entry.data.tasks);
   }
 
   function header(title, sub, actions, back) {
@@ -485,33 +572,55 @@
       '<div class="header-actions">' + (actions || '') + '</div></div>';
   }
 
+  /** フライト切替バー。1件しか無ければ出さない（雑音を減らす） */
+  function flightBar() {
+    if (state.flights.length < 2) return '';
+    return '<div class="flight-bar">' + state.flights.map(function (f) {
+      var active = f.key === state.activeFlight;
+      var isNew = !active && isNewFlight(f);
+      var cached = !!state.flightData[f.key];
+      return '<div class="flight-chip' + (active ? ' active' : '') + (cached ? '' : ' pending') +
+        '" data-act="flight" data-key="' + esc(f.key) + '">' +
+        (isNew ? '<span class="flight-dot"></span>' : '') + esc(f.label) + '</div>';
+    }).join('') + '</div>';
+  }
+
   // ---------- メイン ----------
   function viewMain() {
-    var d = state.data;
+    var meta = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
+    var entry = state.flightData[state.activeFlight];
+    var d = entry && entry.data;
+
     var actions =
-      (state.hasImage ? '<button class="btn-small" data-act="image">原本</button>' : '') +
+      (meta && meta.hasImage ? '<button class="btn-small" data-act="image">原本</button>' : '') +
       '<button class="btn-small" data-act="rules">📖</button>' +
       '<button class="btn-small" data-act="sync">' + (state.syncing ? '…' : '↻') + '</button>' +
       '<button class="btn-small light" data-act="screen" data-screen="settings">⚙</button>';
 
     var title = (d && d.basicInfo.competitionName) || CFG.appName || 'TaskBoard';
-    var sub = d ? d.basicInfo.date : (CFG.eventName || '');
-    var html = header(title, sub, actions);
+    var sub = meta ? meta.label : (CFG.eventName || '');
+    var html = header(title, sub, actions) + flightBar();
 
     html += '<div class="wrap">';
     html += statusBanners();
 
-    if (!d) {
+    if (!state.flights.length) {
       html += '<div class="center-note">' +
         (state.apiUrl
-          ? 'タスクシートがまだ登録されていません。<br>ブリーフィング後に入力担当が登録すると、ここに表示されます。<br><br>「↻」で再同期できます。'
+          ? 'まだフライトが登録されていません。<br>ブリーフィング後に入力担当が登録すると、ここに表示されます。<br><br>「↻」で再同期できます。'
           : 'データの取得先が未設定です。<br>右上の ⚙ から設定してください。') +
         '</div></div>';
       return html;
     }
 
-    if (state.updatedAt) {
-      html += '<div class="updated">タスクシート更新: ' + esc(fmtDateTime(state.updatedAt)) + '</div>';
+    if (!d) {
+      html += '<div class="center-note">「' + esc(meta ? meta.label : '') + '」はまだこの端末に保存されていません。<br>' +
+        '電波のある場所で「↻」を押すか、上のバーで別のフライトを選んでください。</div></div>';
+      return html;
+    }
+
+    if (entry.updatedAt) {
+      html += '<div class="updated">タスクシート更新: ' + esc(fmtDateTime(entry.updatedAt)) + '</div>';
     }
     html += renderBasic(d.basicInfo);
     html += d.tasks.map(renderTask).join('');
@@ -631,7 +740,7 @@
             esc(nameJa || ('Target ' + (i + 1))) + '</span>' : '') +
           (t.coordinates ? '<span class="target-coord">' + esc(t.coordinates) + '</span>' : '') +
         '</div>' +
-        (t.mma ? '<div class="target-mma">MMA ' + esc(t.mma) + ' <span class="target-sub">マーカー計測エリア</span></div>' : '') +
+        (t.mma ? '<div class="target-mma">MMA ' + esc(lookupValue(t.mma).ja) + ' <span class="target-sub">マーカー計測エリア</span></div>' : '') +
         (t.altitude ? '<div class="target-sub">高度 / Altitude: ' + esc(t.altitude) + '</div>' : '') +
         (t.note ? '<div class="target-sub">' + esc(t.note) + '</div>' : '') +
         ((t.name || t.color) && V.en ? '<div class="target-sub">' + esc(V.en) + '</div>' : '') +
@@ -758,7 +867,8 @@
 
   // ---------- 画像 ----------
   function viewImage() {
-    var html = header('原本タスクシート', 'Original Task Sheet', '', 'view');
+    var meta = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
+    var html = header('原本タスクシート', meta ? meta.label : 'Original Task Sheet', '', 'view');
     if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
     if (!state.image) return html + '<div class="center-note">画像がありません' +
       (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
@@ -777,7 +887,7 @@
 
   // ---------- 設定 ----------
   function viewSettings() {
-    var cached = !!safeGet(LS.data);
+    var hasCache = state.flights.some(function (f) { return !!loadFlightCache(f.key); });
     return header('設定', 'Settings', '', 'view') +
       '<div class="wrap">' +
       '<label class="field">データの取得先（GAS ウェブアプリの /exec URL）</label>' +
@@ -788,9 +898,9 @@
       '<button class="btn btn-secondary" data-act="screen" data-screen="local">📋 JSONを直接読み込む（この端末だけ）</button>' +
       '<div class="banner banner-info" style="margin:14px 0">' +
       '<b>オフラインについて</b><br>' +
-      '一度開いたタスクシート・原本画像・スケッチはこの端末に保存され、圏外でも表示できます。' +
+      '一度同期したフライトはすべてこの端末に保存され、圏外でもヘッダー下のバーで切り替えて表示できます。' +
       '電波のある場所で一度「↻」しておいてください。</div>' +
-      (cached ? '<button class="btn btn-ghost" data-act="clear">この端末の保存データを消す</button>' : '') +
+      (hasCache ? '<button class="btn btn-ghost" data-act="clear">この端末の保存データを消す</button>' : '') +
       '<div class="hint" style="margin-top:20px">TaskBoard v' + esc(APP_VERSION) +
       '　ルール: AXMER 2026 Chapter 15' +
       (state.lastSync ? '<br>最終同期: ' + esc(fmtDateTime(state.lastSync)) : '') + '</div>' +
@@ -801,7 +911,7 @@
     return header('JSONを直接読み込む', 'この端末にだけ保存されます', '', 'settings') +
       '<div class="wrap">' +
       '<div class="banner banner-info" style="margin-bottom:12px">' +
-      '通信できない時の緊急用です。ここで読み込んだ内容は<b>他のクルーには共有されません</b>。<br>' +
+      '通信できない時の緊急用です。ここで読み込んだ内容は<b>他のクルーには共有されません</b>し、次に同期すると消えます。<br>' +
       '共有するには入力担当がGASの管理画面から登録してください。</div>' +
       '<textarea id="jsonInput" placeholder=\'{"basicInfo":{...},"tasks":[...]}\'></textarea>' +
       (state.localError ? '<div class="banner banner-error" style="margin-top:8px">' + esc(state.localError) + '</div>' : '') +
@@ -844,6 +954,7 @@
         state.localError = null;
         render();
         break;
+      case 'flight': switchFlight(node.getAttribute('data-key')); break;
       case 'sync': sync(); break;
       case 'image': loadImage(); break;
       case 'sketch': loadSketch(node.getAttribute('data-taskno')); break;
@@ -865,11 +976,15 @@
           if (!m) throw new Error('JSONが見つかりません');
           var parsed = JSON.parse(m[0]);
           if (!parsed.tasks) throw new Error('tasks が含まれていません');
-          safeSet(LS.data, JSON.stringify(parsed));
-          safeSet(LS.updatedAt, new Date().toISOString());
-          state.raw = parsed;
-          state.data = normalizeData(parsed);
-          state.updatedAt = safeGet(LS.updatedAt);
+          var updatedAt = new Date().toISOString();
+          state.flights = state.flights.filter(function (f) { return f.key !== LOCAL_KEY; });
+          state.flights.push({
+            key: LOCAL_KEY, label: '手動入力（この端末のみ）',
+            date: (parsed.basicInfo && parsed.basicInfo.date) || '', updatedAt: updatedAt,
+            taskCount: (parsed.tasks || []).length, hasImage: false
+          });
+          state.flightData[LOCAL_KEY] = { raw: parsed, data: normalizeData(parsed), updatedAt: updatedAt };
+          state.activeFlight = LOCAL_KEY;
           state.localError = null;
           state.screen = 'view';
           render();
@@ -880,13 +995,13 @@
         break;
       }
       case 'clear': {
-        if (!confirm('この端末に保存したタスクシート・画像を消します。よろしいですか？')) break;
+        if (!confirm('この端末に保存したフライト・画像を消します。よろしいですか？')) break;
         Object.keys(localStorage).forEach(function (k) {
           if (k.indexOf('tb.') === 0 && k !== LS.api) safeRemove(k);
         });
-        state.raw = null; state.data = null; state.image = null;
-        state.sketchCache = {}; state.sketchTaskNos = []; state.hasImage = false;
-        state.updatedAt = null; state.lastSync = null;
+        state.flights = []; state.flightData = {}; state.activeFlight = '';
+        state.image = null; state.sketchCache = {}; state.sketchTaskNos = [];
+        state.lastSync = null;
         state.screen = 'view';
         render();
         break;
@@ -913,21 +1028,6 @@
       .catch(function () { return fetch(path).then(function (r) { return r.json(); }); });
   }
 
-  function restoreFromCache() {
-    var raw = safeGet(LS.data);
-    if (raw) {
-      try {
-        state.raw = JSON.parse(raw);
-        state.data = normalizeData(state.raw);
-      } catch (e) { /* 壊れたキャッシュは無視 */ }
-    }
-    state.updatedAt = safeGet(LS.updatedAt) || null;
-    state.lastSync = safeGet(LS.lastSync) || null;
-    state.hasImage = !!safeGet(LS.hasImage);
-    try { state.sketchTaskNos = JSON.parse(safeGet(LS.sketchIdx) || '[]'); }
-    catch (e) { state.sketchTaskNos = []; }
-  }
-
   function boot() {
     state.apiUrl = resolveApiUrl();
     Promise.all([
@@ -940,7 +1040,10 @@
       buildRules(state.rules);
       restoreFromCache();
       // ルール DB を読んだ後に正規化し直す（ruleNo / 和名の補完のため）
-      if (state.raw) state.data = normalizeData(state.raw);
+      Object.keys(state.flightData).forEach(function (key) {
+        var raw = state.flightData[key].raw;
+        state.flightData[key].data = normalizeData(raw);
+      });
       state.booted = true;
       render();
       if (state.apiUrl && state.online) sync();

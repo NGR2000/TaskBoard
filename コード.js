@@ -5,6 +5,11 @@
  *   1. 入力・管理画面（doGet に action が無い時）— 入力担当が使う。google.script.run なので確実に動く。
  *   2. 閲覧用の JSON API（doGet?action=...）— GitHub Pages の PWA が読む。GET のみ。
  *
+ * データモデル: 「フライト」単位で複数保持する。
+ * 大会中はフライトが進むごとに新しいタスクデータシートが発表されるため、
+ * 直前のフライトを上書きするのではなく、シートに1行ずつ積んでいく。
+ * クルー側はどのフライトへも後から切り替えて見られる。
+ *
  * 閲覧側を GitHub Pages に置いたことで、GAS を再デプロイしても
  * クルーに配ったリンクは変わらない。
  */
@@ -12,8 +17,9 @@
 /** クルーに配る閲覧アプリ（GitHub Pages）の URL */
 var APP_URL = 'https://ngr2000.github.io/TaskBoard/';
 
-var SHEET_DATA = 'data';
-var SHEET_IMAGE = 'image';
+var SHEET_FLIGHTS = 'flights';
+var FLIGHTS_HEADER = ['key', 'label', 'date', 'updatedAt', 'json'];
+var IMAGE_PREFIX = 'image_';
 var SKETCH_PREFIX = 'sketch_';
 var CHUNK_SIZE = 40000; // 1セルの上限 5万字に対する安全マージン
 
@@ -30,13 +36,16 @@ function doGet(e) {
   try {
     switch (action) {
       case 'ping':
-        out = { ok: true, updatedAt: readUpdatedAt_(), version: 2 };
+        out = { ok: true, version: 3 };
         break;
-      case 'data':
-        out = apiData_();
+      case 'flights':
+        out = apiFlights_();
+        break;
+      case 'flight':
+        out = apiFlight_(p.key);
         break;
       case 'image':
-        out = { ok: true, image: getImageData_() };
+        out = { ok: true, image: getImageData_(p.key) };
         break;
       case 'sketch':
         out = { ok: true, taskNo: String(p.taskNo || ''), image: getSketchData(p.taskNo) };
@@ -75,28 +84,46 @@ function getExecUrl_() {
 }
 
 // =====================================================================
-// API 本体
+// flights シート
 // =====================================================================
-
-/**
- * 閲覧アプリが最初に叩くエンドポイント。
- * 画像の base64 は含めない（同期のたびに数百KB乗るのを避けるため）。
- * 画像は action=image / action=sketch で必要になった時だけ取りに来る。
- */
-function apiData_() {
+function getFlightsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_DATA);
-  var data = sheet ? String(sheet.getRange('A1').getValue() || '') : '';
-  var updatedAt = sheet ? String(sheet.getRange('B1').getValue() || '') : '';
+  var sheet = ss.getSheetByName(SHEET_FLIGHTS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_FLIGHTS);
+    sheet.getRange(1, 1, 1, FLIGHTS_HEADER.length).setValues([FLIGHTS_HEADER]);
+  }
+  return sheet;
+}
 
-  return {
-    ok: true,
-    version: 2,
-    data: data.length > 10 ? data : null,
-    updatedAt: updatedAt || null,
-    hasImage: hasContent_(ss.getSheetByName(SHEET_IMAGE)),
-    sketchTaskNos: listSketchTaskNos_(ss)
-  };
+/** [{rowIndex, key, label, date, updatedAt, json}] を登録順（シート上の行順）で返す */
+function readFlightRows_() {
+  var sheet = getFlightsSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sheet.getRange(2, 1, lastRow - 1, FLIGHTS_HEADER.length).getValues();
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0]) continue; // key が空の行は無視
+    out.push({
+      rowIndex: i + 2,
+      key: String(row[0]),
+      label: String(row[1] || ''),
+      date: String(row[2] || ''),
+      updatedAt: String(row[3] || ''),
+      json: String(row[4] || '')
+    });
+  }
+  return out;
+}
+
+function slugify_(label) {
+  var s = String(label || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9぀-ヿ一-鿿]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s || ('flight-' + Utilities.getUuid().slice(0, 8));
 }
 
 function hasContent_(sheet) {
@@ -115,9 +142,53 @@ function listSketchTaskNos_(ss) {
   return out;
 }
 
-function readUpdatedAt_() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DATA);
-  return sheet ? String(sheet.getRange('B1').getValue() || '') : '';
+function taskSummary_(jsonStr) {
+  try {
+    var parsed = JSON.parse(jsonStr);
+    return (parsed.tasks || []).map(function (t, i) {
+      return {
+        taskNo: String(t.taskNo || t.TaskNo || (i + 1)),
+        taskId: String(t.taskId || t.type || ''),
+        name: String(t.name || t.typeName || '')
+      };
+    });
+  } catch (e) { return []; }
+}
+
+// =====================================================================
+// API 本体（閲覧アプリ向け・GET専用）
+// =====================================================================
+
+/**
+ * 閲覧アプリが最初に叩くエンドポイント。フライトの一覧（メタ情報のみ）を返す。
+ * 各フライトの中身（json）はここでは返さない。action=flight で個別に取りに来る。
+ */
+function apiFlights_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var rows = readFlightRows_();
+  var flights = rows.map(function (r) {
+    return {
+      key: r.key,
+      label: r.label,
+      date: r.date,
+      updatedAt: r.updatedAt,
+      taskCount: taskSummary_(r.json).length,
+      hasImage: hasContent_(ss.getSheetByName(IMAGE_PREFIX + r.key))
+    };
+  });
+  return { ok: true, version: 3, flights: flights, sketchTaskNos: listSketchTaskNos_(ss) };
+}
+
+/** 指定フライトの中身（タスクJSON本体）を返す */
+function apiFlight_(key) {
+  if (!key) return { ok: false, error: 'key が指定されていません' };
+  var rows = readFlightRows_();
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].key === key) {
+      return { ok: true, key: key, data: rows[i].json, updatedAt: rows[i].updatedAt };
+    }
+  }
+  return { ok: false, error: 'フライトが見つかりません: ' + key };
 }
 
 // =====================================================================
@@ -147,9 +218,10 @@ function readChunks_(sheet) {
   return result || null;
 }
 
-function getImageData_() {
+function getImageData_(key) {
   try {
-    return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_IMAGE));
+    if (!key) return null;
+    return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IMAGE_PREFIX + key));
   } catch (e) { return null; }
 }
 
@@ -163,20 +235,67 @@ function getSketchData(taskNo) {
 // =====================================================================
 // 管理画面から呼ばれる関数（google.script.run）
 // =====================================================================
-function saveTaskData(dataStr) {
+
+/**
+ * フライトを登録／更新する。
+ * key が既存フライトと一致する場合は上書き（訂正の再登録）、
+ * 一致しなければ新規フライトとして末尾に追加される。
+ */
+function saveFlight(key, label, dataStr) {
   var parsed = JSON.parse(dataStr); // 壊れた JSON はここで弾く
   if (!parsed || !parsed.tasks) throw new Error('tasks が含まれていません');
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_DATA) || ss.insertSheet(SHEET_DATA);
-  sheet.getRange('A1').setValue(dataStr);
-  sheet.getRange('B1').setValue(new Date().toISOString());
-  return { ok: true, taskCount: parsed.tasks.length };
+  var finalLabel = String(label || '').trim() || suggestLabel_(parsed);
+  var finalKey = String(key || '').trim() || slugify_(finalLabel);
+  var date = String((parsed.basicInfo && parsed.basicInfo.date) || '');
+  var now = new Date().toISOString();
+
+  var sheet = getFlightsSheet_();
+  var rows = readFlightRows_();
+  var existing = null;
+  for (var i = 0; i < rows.length; i++) { if (rows[i].key === finalKey) { existing = rows[i]; break; } }
+
+  if (existing) {
+    sheet.getRange(existing.rowIndex, 1, 1, FLIGHTS_HEADER.length)
+      .setValues([[finalKey, finalLabel, date, now, dataStr]]);
+  } else {
+    sheet.appendRow([finalKey, finalLabel, date, now, dataStr]);
+  }
+  return { ok: true, key: finalKey, label: finalLabel, taskCount: parsed.tasks.length };
 }
 
-function saveImageData(imageData) {
+/** JSON の中身からラベル案を作る（例: "Flight 3 (#8-#12)"） */
+function suggestLabel_(parsed) {
+  var fields = (parsed.basicInfo && parsed.basicInfo.fields) || [];
+  var flightNo = '', tasks = '';
+  fields.forEach(function (f) {
+    var label = String(f.label || '').toLowerCase();
+    if (label === 'flight' || label === 'flight no') flightNo = f.value;
+    if (label === 'tasks') tasks = f.value;
+  });
+  if (flightNo) return 'Flight ' + flightNo + (tasks ? ' (' + tasks + ')' : '');
+  return 'Flight ' + new Date().toLocaleString('ja-JP');
+}
+
+function deleteFlight(key) {
+  var sheet = getFlightsSheet_();
+  var rows = readFlightRows_();
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].key === key) {
+      sheet.deleteRow(rows[i].rowIndex);
+      var img = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IMAGE_PREFIX + key);
+      if (img) SpreadsheetApp.getActiveSpreadsheet().deleteSheet(img);
+      return true;
+    }
+  }
+  return false;
+}
+
+function saveImageData(key, imageData) {
+  if (!key) throw new Error('フライトが選択されていません');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_IMAGE) || ss.insertSheet(SHEET_IMAGE);
+  var name = IMAGE_PREFIX + key;
+  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
   return true;
 }
@@ -198,41 +317,37 @@ function deleteSketchData(taskNo) {
 /** 管理画面の初期表示用。画像 base64 は返さない（有無だけ） */
 function getAdminState() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_DATA);
-  var data = sheet ? String(sheet.getRange('A1').getValue() || '') : '';
-  var tasks = [];
-  if (data.length > 10) {
-    try {
-      var parsed = JSON.parse(data);
-      tasks = (parsed.tasks || []).map(function (t, i) {
-        return {
-          taskNo: String(t.taskNo || t.TaskNo || (i + 1)),
-          taskId: String(t.taskId || t.type || ''),
-          name: String(t.name || t.typeName || '')
-        };
-      });
-    } catch (e) { /* 壊れていても管理画面は開けるようにする */ }
-  }
+  var rows = readFlightRows_();
+  var flights = rows.map(function (r) {
+    return {
+      key: r.key,
+      label: r.label,
+      date: r.date,
+      updatedAt: r.updatedAt,
+      hasImage: hasContent_(ss.getSheetByName(IMAGE_PREFIX + r.key)),
+      tasks: taskSummary_(r.json)
+    };
+  });
   return {
     ok: true,
-    hasData: data.length > 10,
-    updatedAt: sheet ? String(sheet.getRange('B1').getValue() || '') : '',
-    hasImage: hasContent_(ss.getSheetByName(SHEET_IMAGE)),
+    flights: flights,
     sketchTaskNos: listSketchTaskNos_(ss),
-    tasks: tasks,
     execUrl: getExecUrl_(),
     appUrl: APP_URL
   };
 }
 
-function resetTaskData() {
+/** 大会全体のリセット（全フライト・全画像・全スケッチを削除）。管理画面のみから呼ぶ。 */
+function resetAllData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  ['data', 'image'].forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (sheet) sheet.clearContents();
-  });
+  var flightsSheet = ss.getSheetByName(SHEET_FLIGHTS);
+  if (flightsSheet) ss.deleteSheet(flightsSheet);
+  getFlightsSheet_();
   ss.getSheets().forEach(function (sheet) {
-    if (sheet.getName().indexOf(SKETCH_PREFIX) === 0) sheet.clearContents();
+    var name = sheet.getName();
+    if (name.indexOf(IMAGE_PREFIX) === 0 || name.indexOf(SKETCH_PREFIX) === 0) {
+      ss.deleteSheet(sheet);
+    }
   });
   return true;
 }
