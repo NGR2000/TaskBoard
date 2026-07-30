@@ -213,6 +213,8 @@ input:focus, textarea:focus { border-color: #1a1a1a; }
 /* ---------- image viewer ---------- */
 .viewer { padding: 6px; background: #111; min-height: 70vh; }
 .viewer img { width: 100%; display: block; }
+.viewer img + .viewer-page-label { margin-top: 10px; }
+.viewer-page-label { color: #aaa; font-size: 12px; text-align: center; padding: 6px 0; }
 
 /* ---------- how-to ---------- */
 .howto { background: var(--panel); border-radius: 10px; padding: 14px; font-size: 13px; color: #444; line-height: 1.9; }

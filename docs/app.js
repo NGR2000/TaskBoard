@@ -35,10 +35,10 @@
     screen: 'view',
     booted: false,
     apiUrl: '',
-    flights: [],       // [{key,label,date,updatedAt,taskCount,hasImage}]
+    flights: [],       // [{key,label,date,updatedAt,taskCount,imagePages}]
     flightData: {},    // key -> { raw, data, updatedAt }
     activeFlight: '',
-    image: null,
+    images: [],
     sketchTaskNos: [],
     sketchCache: {},
     currentSketch: null,
@@ -507,21 +507,48 @@
     if (!state.flightData[key] && state.online && key !== LOCAL_KEY) fetchFlight(key);
   }
 
+  /** 原本タスクシートは複数ページ（image_<key>_1, _2, ...）に対応する */
   function loadImage() {
     var key = state.activeFlight;
-    if (state.image) { state.screen = 'image'; render(); return; }
-    var cached = safeGet(LS.imagePrefix + key);
-    if (cached) { state.image = cached; state.screen = 'image'; render(); return; }
+    var meta = state.flights.filter(function (f) { return f.key === key; })[0];
+    var total = (meta && meta.imagePages) || 0;
     state.screen = 'image';
+
+    if (total === 0) { state.images = []; render(); return; }
+
+    var cached = [];
+    for (var i = 1; i <= total; i++) {
+      var c = safeGet(LS.imagePrefix + key + '.' + i);
+      if (!c) { cached = null; break; }
+      cached.push(c);
+    }
+    if (cached) { state.images = cached; render(); return; }
+
+    state.images = [];
     state.syncing = true;
     render();
-    apiGet('image', { key: key })
-      .then(function (res) {
-        state.image = (res && res.image) || null;
-        if (state.image) safeSet(LS.imagePrefix + key, state.image);
-      })
-      .catch(function (e) { state.syncError = e.message || String(e); })
-      .then(function () { state.syncing = false; render(); });
+
+    var results = new Array(total);
+    var remaining = total;
+    var anyFailed = false;
+    function loadPage(page) {
+      apiGet('image', { key: key, page: page })
+        .then(function (res) {
+          var img = (res && res.image) || null;
+          results[page - 1] = img;
+          if (img) safeSet(LS.imagePrefix + key + '.' + page, img);
+        })
+        .catch(function () { anyFailed = true; })
+        .then(function () {
+          remaining--;
+          if (remaining > 0) return;
+          state.images = results.filter(function (x) { return !!x; });
+          state.syncing = false;
+          if (anyFailed && !state.images.length) state.syncError = '画像の取得に失敗しました';
+          render();
+        });
+    }
+    for (var p = 1; p <= total; p++) loadPage(p);
   }
 
   function loadSketch(taskNo) {
@@ -592,7 +619,7 @@
     var d = entry && entry.data;
 
     var actions =
-      (meta && meta.hasImage ? '<button class="btn-small" data-act="image">原本</button>' : '') +
+      (meta && meta.imagePages > 0 ? '<button class="btn-small" data-act="image">原本</button>' : '') +
       '<button class="btn-small" data-act="rules">📖</button>' +
       '<button class="btn-small" data-act="sync">' + (state.syncing ? '…' : '↻') + '</button>' +
       '<button class="btn-small light" data-act="screen" data-screen="settings">⚙</button>';
@@ -870,9 +897,13 @@
     var meta = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
     var html = header('原本タスクシート', meta ? meta.label : 'Original Task Sheet', '', 'view');
     if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
-    if (!state.image) return html + '<div class="center-note">画像がありません' +
+    if (!state.images || !state.images.length) return html + '<div class="center-note">画像がありません' +
       (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
-    return html + '<div class="viewer"><img src="' + esc(state.image) + '" alt="原本タスクシート"></div>';
+    var multi = state.images.length > 1;
+    return html + '<div class="viewer">' + state.images.map(function (img, i) {
+      return (multi ? '<div class="viewer-page-label">' + (i + 1) + ' / ' + state.images.length + '</div>' : '') +
+        '<img src="' + esc(img) + '" alt="原本タスクシート ' + (i + 1) + 'ページ目">';
+    }).join('') + '</div>';
   }
 
   function viewSketch() {
@@ -981,7 +1012,7 @@
           state.flights.push({
             key: LOCAL_KEY, label: '手動入力（この端末のみ）',
             date: (parsed.basicInfo && parsed.basicInfo.date) || '', updatedAt: updatedAt,
-            taskCount: (parsed.tasks || []).length, hasImage: false
+            taskCount: (parsed.tasks || []).length, imagePages: 0
           });
           state.flightData[LOCAL_KEY] = { raw: parsed, data: normalizeData(parsed), updatedAt: updatedAt };
           state.activeFlight = LOCAL_KEY;
@@ -1000,7 +1031,7 @@
           if (k.indexOf('tb.') === 0 && k !== LS.api) safeRemove(k);
         });
         state.flights = []; state.flightData = {}; state.activeFlight = '';
-        state.image = null; state.sketchCache = {}; state.sketchTaskNos = [];
+        state.images = []; state.sketchCache = {}; state.sketchTaskNos = [];
         state.lastSync = null;
         state.screen = 'view';
         render();

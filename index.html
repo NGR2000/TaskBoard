@@ -85,12 +85,13 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <div id="flightList"><div class="status">確認中…</div></div>
 
   <h2>4. 原本タスクシート画像</h2>
-  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。</div>
+  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。タスクシートが複数ページにわたる場合は、ページの順番通りに「+ ページを追加」で1枚ずつ足してください。</div>
   <div class="row">
     <span id="imageStatus" class="status">確認中…</span>
-    <div>
+    <div style="display:flex;gap:6px">
       <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
-      <button class="btn-small" onclick="document.getElementById('imageInput').click()">選択して保存</button>
+      <button class="btn-small" onclick="document.getElementById('imageInput').click()">+ ページを追加</button>
+      <button class="btn-danger-outline" id="deleteImageBtn" onclick="deleteLastImage()" style="display:none">最後のページを削除</button>
     </div>
   </div>
   <div id="imageMsg"></div>
@@ -180,9 +181,7 @@ function renderState() {
   sel.value = s.flights.some(function (f) { return f.key === keepValue; }) ? keepValue : '';
   editingKey = sel.value;
 
-  var img = currentFlight();
-  document.getElementById('imageStatus').textContent =
-    !editingKey ? '（フライトを選ぶと表示されます）' : (img && img.hasImage ? '✅ 保存済み' : '未登録');
+  renderImageStatus();
 
   // フライト一覧
   var list = document.getElementById('flightList');
@@ -231,13 +230,19 @@ function renderState() {
   }
 }
 
+function renderImageStatus() {
+  var f = currentFlight();
+  var pages = f ? f.imagePages : 0;
+  document.getElementById('imageStatus').textContent =
+    !editingKey ? '（フライトを選ぶと表示されます）' : (pages > 0 ? '✅ ' + pages + 'ページ保存済み' : '未登録');
+  document.getElementById('deleteImageBtn').style.display = pages > 0 ? '' : 'none';
+}
+
 function onSelectFlight() {
   editingKey = document.getElementById('flightSelect').value;
   document.getElementById('labelInput').value = '';
   document.getElementById('jsonInput').value = '';
-  var img = currentFlight();
-  document.getElementById('imageStatus').textContent =
-    !editingKey ? '（フライトを選ぶと表示されます）' : (img && img.hasImage ? '✅ 保存済み' : '未登録');
+  renderImageStatus();
 }
 
 function editFlight(key) {
@@ -304,14 +309,26 @@ function uploadImage(input) {
   var file = input.files[0];
   if (!file) return;
   if (!editingKey) { msg('imageMsg', '先にフライトを選んでください', 'err'); return; }
+  var f = currentFlight();
+  var nextPage = (f ? f.imagePages : 0) + 1;
   msg('imageMsg', '圧縮中…', 'info');
   compressImage(file, function (data) {
-    msg('imageMsg', '保存中…', 'info');
+    msg('imageMsg', 'ページ' + nextPage + ' を保存中…', 'info');
     google.script.run
-      .withSuccessHandler(function () { msg('imageMsg', '✅ 保存しました', 'ok'); refresh(); })
+      .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + nextPage + ' を保存しました', 'ok'); refresh(); })
       .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveImageData(editingKey, data);
+      .saveImageData(editingKey, nextPage, data);
   });
+  input.value = '';
+}
+
+function deleteLastImage() {
+  if (!editingKey) return;
+  if (!confirm('最後のページを削除しますか？')) return;
+  google.script.run
+    .withSuccessHandler(function () { msg('imageMsg', '最後のページを削除しました', 'ok'); refresh(); })
+    .withFailureHandler(function (e) { msg('imageMsg', '削除に失敗: ' + e.message, 'err'); })
+    .deleteLastImagePage(editingKey);
 }
 
 function upSketch(input, taskNo) {
