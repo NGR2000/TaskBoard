@@ -195,8 +195,8 @@ function renderState() {
           '<div><div class="flight-label">' + esc(f.label) + '</div>' +
           '<div class="flight-sub">' + esc(f.date || '') + '　' + f.taskCount + 'タスク　更新: ' + esc(updated) + '</div></div>' +
           '<div class="flight-actions">' +
-            '<button class="btn-small" onclick="editFlight(' + JSON.stringify(f.key) + ')">編集</button>' +
-            '<button class="btn-danger-outline" onclick="deleteFlight(' + JSON.stringify(f.key) + ',' + JSON.stringify(f.label) + ')">削除</button>' +
+            '<button class="btn-small" data-act="edit-flight" data-key="' + esc(f.key) + '">編集</button>' +
+            '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '" data-label="' + esc(f.label) + '">削除</button>' +
           '</div>' +
         '</div></div>';
     }).join('');
@@ -218,12 +218,10 @@ function renderState() {
   } else {
     skList.innerHTML = allTasks.map(function (t) {
       var has = s.sketchTaskNos.indexOf(t.taskNo) >= 0;
-      var no = JSON.stringify(t.taskNo);
       var btns = has
-        ? '<button class="btn-danger-outline" onclick="delSketch(' + no + ')">削除</button>'
-        : '<input type="file" id="sk_' + t.taskNo + '" accept="image/*" style="display:none" ' +
-          'onchange="upSketch(this,' + no + ')">' +
-          '<button class="btn-small" onclick="document.getElementById(\'sk_' + t.taskNo + '\').click()">追加</button>';
+        ? '<button class="btn-danger-outline" data-act="delete-sketch" data-taskno="' + esc(t.taskNo) + '">削除</button>'
+        : '<input type="file" id="sk_' + esc(t.taskNo) + '" accept="image/*" style="display:none" data-taskno="' + esc(t.taskNo) + '" data-act="upload-sketch">' +
+          '<button class="btn-small" data-act="pick-sketch" data-target="sk_' + esc(t.taskNo) + '">追加</button>';
       return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + esc(t.taskNo) +
         ' <b>' + esc(t.taskId) + '</b> <span class="status">' + esc(t.name) + '</span></span><span>' + btns + '</span></div>';
     }).join('');
@@ -359,6 +357,29 @@ function resetAll() {
     .withFailureHandler(function (e) { msg('resetMsg', 'リセットに失敗: ' + e.message, 'err'); })
     .resetAllData();
 }
+
+document.addEventListener('click', function (ev) {
+  var node = ev.target.closest ? ev.target.closest('[data-act]') : null;
+  if (!node) return;
+  var act = node.getAttribute('data-act');
+  switch (act) {
+    case 'edit-flight': editFlight(node.getAttribute('data-key')); break;
+    case 'delete-flight': deleteFlight(node.getAttribute('data-key'), node.getAttribute('data-label')); break;
+    case 'delete-sketch': delSketch(node.getAttribute('data-taskno')); break;
+    case 'pick-sketch': {
+      var target = document.getElementById(node.getAttribute('data-target'));
+      if (target) target.click();
+      break;
+    }
+  }
+});
+
+document.addEventListener('change', function (ev) {
+  var node = ev.target;
+  if (node.getAttribute && node.getAttribute('data-act') === 'upload-sketch') {
+    upSketch(node, node.getAttribute('data-taskno'));
+  }
+});
 
 refresh();
 </script>

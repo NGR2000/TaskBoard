@@ -131,8 +131,13 @@ function hasContent_(sheet) {
 }
 
 /** 原本タスクシートはページ画像を image_<key>_1, _2, ... と連番で持つ。
- *  欠番なく先頭から数える（途中削除は無く、末尾からしか消せない設計のため）。 */
+ *  欠番なく先頭から数える（途中削除は無く、末尾からしか消せない設計のため）。
+ *  複数ページ対応前に image_<key>（ページ番号なし）で保存された画像が
+ *  残っている場合は、それを1ページ目として数える。 */
 function countImagePages_(ss, key) {
+  if (hasContent_(ss.getSheetByName(IMAGE_PREFIX + key)) && !hasContent_(ss.getSheetByName(IMAGE_PREFIX + key + '_1'))) {
+    return 1;
+  }
   var n = 0;
   while (hasContent_(ss.getSheetByName(IMAGE_PREFIX + key + '_' + (n + 1)))) n++;
   return n;
@@ -229,8 +234,11 @@ function readChunks_(sheet) {
 function getImageData_(key, page) {
   try {
     if (!key) return null;
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var p = Number(page) || 1;
-    return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IMAGE_PREFIX + key + '_' + p));
+    var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + p);
+    if (!sheet && p === 1) sheet = ss.getSheetByName(IMAGE_PREFIX + key); // 複数ページ対応前の保存分
+    return readChunks_(sheet);
   } catch (e) { return null; }
 }
 
@@ -294,7 +302,8 @@ function deleteFlight(key) {
       sheet.deleteRow(rows[i].rowIndex);
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       ss.getSheets().forEach(function (s) {
-        if (s.getName().indexOf(IMAGE_PREFIX + key + '_') === 0) ss.deleteSheet(s);
+        var name = s.getName();
+        if (name.indexOf(IMAGE_PREFIX + key + '_') === 0 || name === IMAGE_PREFIX + key) ss.deleteSheet(s);
       });
       return true;
     }
@@ -317,7 +326,7 @@ function deleteLastImagePage(key) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var n = countImagePages_(ss, key);
   if (n === 0) return false;
-  var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + n);
+  var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + n) || ss.getSheetByName(IMAGE_PREFIX + key);
   if (sheet) ss.deleteSheet(sheet);
   return true;
 }
