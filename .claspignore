@@ -6,6 +6,9 @@ DepVer039_コード.js
 *.JSON
 *.md
 JSON/
+docs/**
 docs/
+.claude/**
 .claude/
+memory/**
 memory/
