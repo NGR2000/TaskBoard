@@ -129,7 +129,25 @@
   function lookupValue(value) {
     var entry = valueMap[normKey(value)];
     if (entry) return { ja: entry.ja, en: value, known: true, color: entry.color || null };
+    var combo = lookupCombo(value);
+    if (combo) return combo;
     return { ja: value, en: null, known: false, color: colorOf(value) };
+  }
+
+  /** "red and yellow" のような既知語の組み合わせを分解して訳す。
+   *  分割した単語が全て辞書に一致した時だけ使う（長い自由記述の誤爆を避けるため）。 */
+  function lookupCombo(value) {
+    if (!value || String(value).length > 40) return null;
+    var parts = String(value).split(/\s*(?:,|\/|&|\+|\band\b)\s*/i).filter(function (s) { return s; });
+    if (parts.length < 2) return null;
+    var jas = [], color = null;
+    for (var i = 0; i < parts.length; i++) {
+      var e = valueMap[normKey(parts[i])];
+      if (!e) return null;
+      jas.push(e.ja);
+      if (!color && e.color) color = e.color;
+    }
+    return { ja: jas.join('・'), en: value, known: true, color: color };
   }
 
   /** 単語単位の完全一致でのみ色を拾う。部分文字列一致だと "declared" が
@@ -186,20 +204,24 @@
     taskNo: 1, TaskNo: 1, no: 1, taskId: 1, type: 1, id: 1, name: 1, typeName: 1,
     ruleNo: 1, rule_number: 1, markerColor: 1, markerColour: 1, markerDrop: 1,
     scoringPeriodEnd: 1, scoringPeriodStart: 1, targets: 1, fields: 1, notes: 1,
+    notesJa: 1, notes_ja: 1,
     targetGPS: 1, targetColor: 1, targetColour: 1, mma: 1
   };
   var BASIC_RESERVED = {
-    competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1
+    competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1,
+    notesJa: 1, notes_ja: 1, generalNotesJa: 1
   };
 
   function pushField(list, label, value, opts) {
     if (isBlank(value)) return;
     var f = { label: String(label), value: String(value).trim() };
     if (opts && opts.wide) f.wide = true;
+    if (opts && !isBlank(opts.valueJa)) f.valueJa = String(opts.valueJa).trim();
     list.push(f);
   }
 
-  /** 任意の形の fields（配列 or オブジェクト）を [{label,value}] に揃える */
+  /** 任意の形の fields（配列 or オブジェクト）を [{label,value,valueJa?}] に揃える。
+   *  valueJa はシート原文が長い自由記述の時だけ変換元(Claude)が添える和訳（無ければ辞書のみ）。 */
   function coerceFields(src) {
     var out = [];
     if (!src) return out;
@@ -209,7 +231,8 @@
         if (typeof f === 'string') { pushField(out, f, ''); return; }
         var label = f.label || f.name || f.key || f.en || '';
         var value = f.value !== undefined ? f.value : (f.val !== undefined ? f.val : '');
-        pushField(out, label, value, { wide: !!f.wide });
+        var valueJa = firstOf(f.valueJa, f.value_ja, f.ja, '');
+        pushField(out, label, value, { wide: !!f.wide, valueJa: valueJa });
       });
     } else if (typeof src === 'object') {
       Object.keys(src).forEach(function (k) { pushField(out, humanize(k), src[k]); });
@@ -276,6 +299,7 @@
       scoringPeriodStart: firstOf(t.scoringPeriodStart, ''),
       scoringPeriodEnd: firstOf(t.scoringPeriodEnd, ''),
       notes: firstOf(t.notes, ''),
+      notesJa: firstOf(t.notesJa, t.notes_ja, ''),
       targets: normalizeTargets(t),
       fields: coerceFields(t.fields)
     };
@@ -320,6 +344,7 @@
       competitionName: firstOf(b.competitionName, b.CompetitionName, CFG.eventName, ''),
       date: firstOf(b.date, ''),
       notes: firstOf(b.notes, b.generalNotes, ''),
+      notesJa: firstOf(b.notesJa, b.notes_ja, b.generalNotesJa, ''),
       fields: coerceFields(b.fields)
     };
     Object.keys(V1_BASIC).forEach(function (k) { pushField(info.fields, V1_BASIC[k], b[k]); });
@@ -668,9 +693,19 @@
     return out ? '<div style="margin-bottom:12px">' + out + '</div>' : '';
   }
 
+  /** 注記: 和訳が添えられていれば日本語を上、シート原文の英語を下に二重表記する */
+  function renderNotes(notes, notesJa) {
+    if (isBlank(notes)) return '';
+    if (!isBlank(notesJa)) {
+      return '<div class="notes"><div class="notes-ja">📝 ' + esc(notesJa) + '</div>' +
+        '<div class="notes-en">' + esc(notes) + '</div></div>';
+    }
+    return '<div class="notes">📝 ' + esc(notes) + '</div>';
+  }
+
   function renderBasic(info) {
     var open = !!state.open.basic;
-    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide); }).join('');
+    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
     if (!rows && !info.notes) return '';
     return '<div class="card">' +
       '<div class="card-header" data-act="toggle" data-key="basic">' +
@@ -678,7 +713,7 @@
         '<span class="chevron">' + (open ? '▲' : '▼') + '</span>' +
       '</div>' +
       (open ? '<div class="card-body">' + rows +
-        (info.notes ? '<div class="notes">📝 ' + esc(info.notes) + '</div>' : '') +
+        renderNotes(info.notes, info.notesJa) +
         '</div>' : '') +
       '</div>';
   }
@@ -713,9 +748,9 @@
       body += renderTargets(task);
       if (!isBlank(task.markerColor)) body += renderRow('Marker Colour', task.markerColor);
       if (!isBlank(task.markerDrop)) body += renderRow('Marker Drop', task.markerDrop);
-      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide); }).join('');
+      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
       body += renderTimer(task);
-      if (!isBlank(task.notes)) body += '<div class="notes">📝 ' + esc(task.notes) + '</div>';
+      body += renderNotes(task.notes, task.notesJa);
       body += renderAttach(task);
       body += '</div>';
     }
@@ -733,11 +768,13 @@
     return /^task/i.test(no) ? no : 'Task ' + no;
   }
 
-  /** ラベル1行: 日本語を大きく、タスクシートの英語原文を小さく */
-  function renderRow(label, value, wide) {
+  /** ラベル1行: 日本語を大きく、タスクシートの英語原文を小さく
+   *  valueJa は辞書に無い自由記述の和訳（変換時にClaudeが添えたもの）。辞書一致が無い時だけ使う。 */
+  function renderRow(label, value, wide, valueJa) {
     if (isBlank(value)) return '';
     var L = lookupLabel(label);
     var V = lookupValue(value);
+    if (!V.known && !isBlank(valueJa)) V = { ja: valueJa, en: value, known: true, color: V.color };
     var labelHtml = '<span class="label-ja">' + esc(L.ja) +
       (L.known ? '' : '<span class="unknown-flag">辞書外</span>') + '</span>' +
       (L.en ? '<span class="label-en">' + esc(L.en) + '</span>' : '');

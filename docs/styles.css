@@ -161,6 +161,8 @@ button { font: inherit; cursor: pointer; }
   padding: 9px 12px; margin: 10px 0; color: var(--danger); font-weight: 700; font-size: 14px; line-height: 1.55;
 }
 .notes { margin-top: 10px; padding: 9px 12px; background: var(--warn-bg); border: 1px solid #e0c07a; border-radius: 9px; font-size: 13.5px; color: #5a4300; line-height: 1.65; }
+.notes-ja { font-weight: 600; }
+.notes-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.75; }
 
 /* ---------- timer ---------- */
 .timer-box { margin-top: 12px; padding: 11px 13px; background: #f0f0f0; border-radius: 10px; }

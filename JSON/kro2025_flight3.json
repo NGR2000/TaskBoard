@@ -44,7 +44,8 @@
       "scoringArea": "MMA",
       "fields": [
         { "label": "Task order", "value": "in any order" },
-        { "label": "Description of scoring area(s)", "value": "CLP1 - 5313/0376 - 920ft. Markers must be dropped in A-A or B-B (see quadrant diagram)." },
+        { "label": "Description of scoring area(s)", "value": "CLP1 - 5313/0376 - 920ft. Markers must be dropped in A-A or B-B (see quadrant diagram).",
+          "valueJa": "CLP1 - 5313/0376 - 920ft。マーカーは A-A または B-B 内に投下すること（象限図を参照）。" },
         { "label": "MMA", "value": "R50m" }
       ]
     },
@@ -90,12 +91,15 @@
       "scoringArea": "entire contest area",
       "fields": [
         { "label": "Task order", "value": "in any order" },
-        { "label": "Method of declaration", "value": "in loggergoal #1, max. 3 valid declarations" },
+        { "label": "Method of declaration", "value": "in loggergoal #1, max. 3 valid declarations",
+          "valueJa": "ロガーゴール#1内で宣言。有効な宣言は最大3回まで" },
         { "label": "Number of goals permitted", "value": "1" },
-        { "label": "Goals available for declaration", "value": "any coordinate (no goal number) with altitude: goal altitude must be at least 1000ft higher than declaration point" },
+        { "label": "Goals available for declaration", "value": "any coordinate (no goal number) with altitude: goal altitude must be at least 1000ft higher than declaration point",
+          "valueJa": "ゴール番号のない任意の座標（高度指定あり）：ゴール高度は宣言地点より1000ft以上高いこと" },
         { "label": "minimum and maximum distance between declaration point and declared goal(s)", "value": "min. 3km" }
       ],
       "notes": "The result is ratio of the 3D-distance (in m) from the mark to the declared goal divided by the distance (in km) between the declaration point and the goal. Smallest result is best.",
+      "notesJa": "結果は、マーク地点から宣言ゴールまでの3D距離（m）を、宣言地点から宣言ゴールまでの距離（km）で割った比率。この比率が最も小さい方が良い成績となる。",
       "loggerMarker": "4"
     }
   ]
