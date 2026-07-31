@@ -58,8 +58,8 @@
       "scoringArea": "entire contest area",
       "fields": [
         { "label": "Task order", "value": "in any order" },
-        { "label": "Description of hare balloon", "value": "see photo" },
-        { "label": "Location of the launch point of the hare balloon", "value": "near CLP1" },
+        { "label": "Description of hare balloon", "value": "see photo", "valueJa": "写真を参照" },
+        { "label": "Location of the launch point of the hare balloon", "value": "near CLP1", "valueJa": "CLP1付近" },
         { "label": "Set take-off time of the hare balloon", "value": "06:00" },
         { "label": "Intended flight duration of the hare balloon", "value": "45min +/-15min" },
         { "label": "MMA", "value": "R20m" }
