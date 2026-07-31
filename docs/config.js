@@ -10,7 +10,7 @@
  * 優先順位:  ?api=... （URLパラメータ）  >  localStorage  >  ここの apiUrl
  */
 window.TASKBOARD_CONFIG = {
-  apiUrl: "https://script.google.com/macros/s/AKfycbxaGi3KcMjPCsX4_dbOEcBo4D3J1RDF04Rr9jN91i4cv0hkoZrH6iqy0_axZkm3STystQ/exec",
+  apiUrl: "https://script.google.com/macros/s/AKfycbzEQgwL-1PqtROIpZ7QowZUihoYTZlaOR7hCUpvMX8KhrrSme-VJebjnqbyJ1Dj9gXn5g/exec",
   appName: "TaskBoard",
   eventName: "26th FAI World Hot Air Balloon Championship 2026"
 };
