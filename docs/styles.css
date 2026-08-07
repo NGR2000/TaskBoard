@@ -161,6 +161,8 @@ button { font: inherit; cursor: pointer; }
   padding: 9px 12px; margin: 10px 0; color: var(--danger); font-weight: 700; font-size: 14px; line-height: 1.55;
 }
 .notes { margin-top: 10px; padding: 9px 12px; background: var(--warn-bg); border: 1px solid #e0c07a; border-radius: 9px; font-size: 13.5px; color: #5a4300; line-height: 1.65; }
+.notes-ja { font-weight: 600; }
+.notes-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.75; }
 
 /* ---------- timer ---------- */
 .timer-box { margin-top: 12px; padding: 11px 13px; background: #f0f0f0; border-radius: 10px; }
@@ -213,6 +215,8 @@ input:focus, textarea:focus { border-color: #1a1a1a; }
 /* ---------- image viewer ---------- */
 .viewer { padding: 6px; background: #111; min-height: 70vh; }
 .viewer img { width: 100%; display: block; }
+.viewer img + .viewer-page-label { margin-top: 10px; }
+.viewer-page-label { color: #aaa; font-size: 12px; text-align: center; padding: 6px 0; }
 
 /* ---------- how-to ---------- */
 .howto { background: var(--panel); border-radius: 10px; padding: 14px; font-size: 13px; color: #444; line-height: 1.9; }

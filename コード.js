@@ -45,7 +45,7 @@ function doGet(e) {
         out = apiFlight_(p.key);
         break;
       case 'image':
-        out = { ok: true, image: getImageData_(p.key) };
+        out = { ok: true, image: getImageData_(p.key, p.page) };
         break;
       case 'sketch':
         out = { ok: true, taskNo: String(p.taskNo || ''), image: getSketchData(p.taskNo) };
@@ -130,6 +130,19 @@ function hasContent_(sheet) {
   return !!(sheet && sheet.getLastRow() > 0 && String(sheet.getRange(1, 1).getValue() || '') !== '');
 }
 
+/** 原本タスクシートはページ画像を image_<key>_1, _2, ... と連番で持つ。
+ *  欠番なく先頭から数える（途中削除は無く、末尾からしか消せない設計のため）。
+ *  複数ページ対応前に image_<key>（ページ番号なし）で保存された画像が
+ *  残っている場合は、それを1ページ目として数える。 */
+function countImagePages_(ss, key) {
+  if (hasContent_(ss.getSheetByName(IMAGE_PREFIX + key)) && !hasContent_(ss.getSheetByName(IMAGE_PREFIX + key + '_1'))) {
+    return 1;
+  }
+  var n = 0;
+  while (hasContent_(ss.getSheetByName(IMAGE_PREFIX + key + '_' + (n + 1)))) n++;
+  return n;
+}
+
 /** シート名を1回だけ走査する（タスク数ぶん getSheetByName を回さない） */
 function listSketchTaskNos_(ss) {
   var out = [];
@@ -173,7 +186,7 @@ function apiFlights_() {
       date: r.date,
       updatedAt: r.updatedAt,
       taskCount: taskSummary_(r.json).length,
-      hasImage: hasContent_(ss.getSheetByName(IMAGE_PREFIX + r.key))
+      imagePages: countImagePages_(ss, r.key)
     };
   });
   return { ok: true, version: 3, flights: flights, sketchTaskNos: listSketchTaskNos_(ss) };
@@ -218,10 +231,14 @@ function readChunks_(sheet) {
   return result || null;
 }
 
-function getImageData_(key) {
+function getImageData_(key, page) {
   try {
     if (!key) return null;
-    return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IMAGE_PREFIX + key));
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var p = Number(page) || 1;
+    var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + p);
+    if (!sheet && p === 1) sheet = ss.getSheetByName(IMAGE_PREFIX + key); // 複数ページ対応前の保存分
+    return readChunks_(sheet);
   } catch (e) { return null; }
 }
 
@@ -283,20 +300,34 @@ function deleteFlight(key) {
   for (var i = 0; i < rows.length; i++) {
     if (rows[i].key === key) {
       sheet.deleteRow(rows[i].rowIndex);
-      var img = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IMAGE_PREFIX + key);
-      if (img) SpreadsheetApp.getActiveSpreadsheet().deleteSheet(img);
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      ss.getSheets().forEach(function (s) {
+        var name = s.getName();
+        if (name.indexOf(IMAGE_PREFIX + key + '_') === 0 || name === IMAGE_PREFIX + key) ss.deleteSheet(s);
+      });
       return true;
     }
   }
   return false;
 }
 
-function saveImageData(key, imageData) {
+/** 原本タスクシートの1ページぶんを保存する。page を省略すると1ページ目。 */
+function saveImageData(key, page, imageData) {
   if (!key) throw new Error('フライトが選択されていません');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var name = IMAGE_PREFIX + key;
+  var name = IMAGE_PREFIX + key + '_' + (Number(page) || 1);
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
+  return true;
+}
+
+/** 原本タスクシートの最後のページを削除する（途中のページは削除できない設計）。 */
+function deleteLastImagePage(key) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var n = countImagePages_(ss, key);
+  if (n === 0) return false;
+  var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + n) || ss.getSheetByName(IMAGE_PREFIX + key);
+  if (sheet) ss.deleteSheet(sheet);
   return true;
 }
 
@@ -324,7 +355,7 @@ function getAdminState() {
       label: r.label,
       date: r.date,
       updatedAt: r.updatedAt,
-      hasImage: hasContent_(ss.getSheetByName(IMAGE_PREFIX + r.key)),
+      imagePages: countImagePages_(ss, r.key),
       tasks: taskSummary_(r.json)
     };
   });

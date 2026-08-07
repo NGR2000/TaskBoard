@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 2,
+  "_source": "渡良瀬練習フライトの実物タスクシート（Watarase Practice, Flight 1, 2026.8.1 AM, Tasks #1-#4）をそのまま起こしたもの。",
+  "basicInfo": {
+    "competitionName": "Watarase Practice",
+    "date": "2026.8.1",
+    "fields": [
+      { "label": "Flight", "value": "1" },
+      { "label": "Tasks", "value": "#1, #2, #3, #4" },
+      { "label": "Launch period", "value": "5:30" },
+      { "label": "PZs in force", "value": "all active" },
+      { "label": "Solo flight", "value": "not required" },
+      { "label": "Sunrise/Sunset", "value": "04:35 / 18:57" },
+      { "label": "Min. ILP → all goals", "value": "500m" },
+      { "label": "Next briefing", "value": "04:00" },
+      { "label": "QNH", "value": "10??" }
+    ]
+  },
+  "tasks": [
+    {
+      "taskNo": "1",
+      "taskId": "PDG",
+      "ruleNo": "15.1",
+      "scoringPeriodEnd": "06:00",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "1",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Method of declaration", "value": "in loggergoal #1 or #2 before TO",
+          "valueJa": "ロガーゴール#1または#2で離陸前に宣言" },
+        { "label": "Number of goals permitted", "value": "2" },
+        { "label": "Goals available for declaration",
+          "value": "any coordinate and altitude, min. 0.5km from goal of other tasks",
+          "valueJa": "任意の座標と高度（他タスクのゴールから最小0.5km離れていること）" },
+        { "label": "Minimum and maximum distances between declaration point and declared goal",
+          "value": "minimum 1km - no maximum",
+          "valueJa": "最小1km、最大なし" }
+      ]
+    },
+    {
+      "taskNo": "2",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "markerColor": "Orange",
+      "markerDrop": "free",
+      "scoringPeriodEnd": "06:30",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "2",
+      "mma": "R50m",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Position of various set goals/targets", "value": "167, 188, 109" }
+      ],
+      "notes": "写真参照"
+    },
+    {
+      "taskNo": "3",
+      "taskId": "FIN",
+      "ruleNo": "15.4",
+      "markerColor": "Blue",
+      "markerDrop": "free",
+      "scoringPeriodEnd": "06:45",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "3",
+      "targets": [
+        { "coordinates": "38139/1273", "mma": "R50m" }
+      ],
+      "fields": [
+        { "label": "Task order", "value": "in order" }
+      ]
+    },
+    {
+      "taskNo": "4",
+      "taskId": "FON",
+      "ruleNo": "15.5",
+      "scoringPeriodEnd": "07:00",
+      "scoringArea": "entire contest area",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Method of declaration", "value": "in loggergoal #1, before mark of task #5",
+          "valueJa": "ロガーゴール#1で、タスク#5のマークより前に宣言" },
+        { "label": "Number of goals permitted", "value": "1" },
+        { "label": "Goals available for declaration",
+          "value": "any coordinate with altitude: altitude must be at least 500ft higher or lower than declaration point",
+          "valueJa": "高度指定付きの任意の座標：高度は宣言地点より500ft以上高いか低いこと" },
+        { "label": "Minimum and maximum distances between declaration point and declared goal",
+          "value": "min. 1.0km - no maximum",
+          "valueJa": "最小1.0km、最大なし" }
+      ]
+    }
+  ]
+}

@@ -103,7 +103,8 @@ window.TASKBOARD_CONFIG = {
    直す時だけ一覧からそのフライトを選ぶ）
 4. 出てきたJSONを貼り付けて「登録して全クルーに反映」— ラベルは空でも
    JSONの中身（Flight番号・Tasks番号）から自動で付く
-5. 原本画像・スケッチがあれば登録（原本は「2.」で選んでいるフライトに紐づく）
+5. 原本画像・スケッチがあれば登録（原本は「2.」で選んでいるフライトに紐づく。
+   タスクシートが複数ページにわたる場合は、順番通りに「+ ページを追加」で1枚ずつ足す）
 6. 初回だけ「クルーに配るリンク」をLINEで共有。以降のフライトはこのURLのまま増えていく
 
 ### クルー
@@ -165,9 +166,13 @@ window.TASKBOARD_CONFIG = {
         { "name": "White", "color": "White", "coordinates": "4773/7415", "mma": "R 80m" }
       ],
       "fields": [
-        { "label": "Min / Max Distance from CLP", "value": "3000m / 8000m" }
+        { "label": "Min / Max Distance from CLP", "value": "3000m / 8000m" },
+        { "label": "Goals available for declaration",
+          "value": "any coordinate (no goal number) with altitude: goal altitude must be at least 1000ft higher than declaration point",
+          "valueJa": "ゴール番号のない任意の座標（高度指定あり）：ゴール高度は宣言地点より1000ft以上高いこと" }
       ],
-      "notes": "..."
+      "notes": "...",
+      "notesJa": "..."
     }
   ]
 }
@@ -176,6 +181,11 @@ window.TASKBOARD_CONFIG = {
 `targets` を省略して旧形式の `targetGPS` に
 `"1650/8208 (Red), 1927/7744 (White)"` のように書いた場合も、
 座標と色名を自動で分解して1つずつ表示する。
+
+`value` が単語（色名・"Free"・"In Order" など）なら辞書が自動で和訳するので `valueJa` は不要。
+**辞書に無い長い自由記述**（"Goals available for declaration" の説明文、Scoring Area の説明文など）
+だけ `valueJa` を添えると、日本語を太字・英語原文を小さくその下に二重表記する。
+`notes` / `basicInfo.notes` も同様に `notesJa` を添えられる（無ければ従来通り英語のみ表示）。
 
 ---
 
@@ -194,8 +204,9 @@ window.TASKBOARD_CONFIG = {
   "basicInfo": {
     "competitionName": "...",
     "date": "YYYY年M月D日（曜）AM/PM",
-    "fields": [ { "label": "シート上の英語表記", "value": "値" } ],
-    "notes": "General Notes があれば"
+    "fields": [ { "label": "シート上の英語表記", "value": "値", "valueJa": "値が長い自由記述の説明文の時だけ、その和訳" } ],
+    "notes": "General Notes があれば",
+    "notesJa": "notes の和訳（notesがあれば必ず添える）"
   },
   "tasks": [
     {
@@ -209,8 +220,9 @@ window.TASKBOARD_CONFIG = {
       "targets": [
         { "name": "Red", "color": "Red", "coordinates": "1650/8208", "mma": "R 70m" }
       ],
-      "fields": [ { "label": "シート上の英語表記", "value": "値" } ],
-      "notes": "そのタスクの注記"
+      "fields": [ { "label": "シート上の英語表記", "value": "値", "valueJa": "値が長い自由記述の説明文の時だけ、その和訳" } ],
+      "notes": "そのタスクの注記",
+      "notesJa": "notes の和訳（notesがあれば必ず添える）"
     }
   ]
 }
@@ -218,7 +230,12 @@ window.TASKBOARD_CONFIG = {
 規則:
 - ターゲットが複数ある場合は targets に1つずつ分けて入れる。MMAがターゲットごとに違う場合も個別に。
 - 距離の指定（Min/Max Distance など）は fields にシートの表記どおり入れる。
-- 値は翻訳しない。シートに書いてある英語のまま入れる（アプリ側で日本語化する）。
+- value は翻訳しない。シートに書いてある英語のまま入れる（アプリ側で日本語化する）。
+- ただし value が単語や短い定型句（色名・Free・In Order など）ではなく1文以上の説明文
+  （例: "Goals available for declaration" や "Description of scoring area(s)" の中身、
+  スコアリング方法の説明など）の場合は、同じ項目に valueJa として日本語訳を追加する
+  （アプリ側の辞書は単語しかカバーできないため）。短い値には valueJa を付けない。
+- notes / basicInfo の notes も、英語のままの notes に加えて notesJa に日本語訳を入れる。
 - 読み取れなかった箇所は勝手に補わず、空文字にするか項目ごと省く。
 - JSON のみを出力する。
 ```

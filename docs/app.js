@@ -35,10 +35,10 @@
     screen: 'view',
     booted: false,
     apiUrl: '',
-    flights: [],       // [{key,label,date,updatedAt,taskCount,hasImage}]
+    flights: [],       // [{key,label,date,updatedAt,taskCount,imagePages}]
     flightData: {},    // key -> { raw, data, updatedAt }
     activeFlight: '',
-    image: null,
+    images: [],
     sketchTaskNos: [],
     sketchCache: {},
     currentSketch: null,
@@ -129,7 +129,25 @@
   function lookupValue(value) {
     var entry = valueMap[normKey(value)];
     if (entry) return { ja: entry.ja, en: value, known: true, color: entry.color || null };
+    var combo = lookupCombo(value);
+    if (combo) return combo;
     return { ja: value, en: null, known: false, color: colorOf(value) };
+  }
+
+  /** "red and yellow" のような既知語の組み合わせを分解して訳す。
+   *  分割した単語が全て辞書に一致した時だけ使う（長い自由記述の誤爆を避けるため）。 */
+  function lookupCombo(value) {
+    if (!value || String(value).length > 40) return null;
+    var parts = String(value).split(/\s*(?:,|\/|&|\+|\band\b)\s*/i).filter(function (s) { return s; });
+    if (parts.length < 2) return null;
+    var jas = [], color = null;
+    for (var i = 0; i < parts.length; i++) {
+      var e = valueMap[normKey(parts[i])];
+      if (!e) return null;
+      jas.push(e.ja);
+      if (!color && e.color) color = e.color;
+    }
+    return { ja: jas.join('・'), en: value, known: true, color: color };
   }
 
   /** 単語単位の完全一致でのみ色を拾う。部分文字列一致だと "declared" が
@@ -186,20 +204,24 @@
     taskNo: 1, TaskNo: 1, no: 1, taskId: 1, type: 1, id: 1, name: 1, typeName: 1,
     ruleNo: 1, rule_number: 1, markerColor: 1, markerColour: 1, markerDrop: 1,
     scoringPeriodEnd: 1, scoringPeriodStart: 1, targets: 1, fields: 1, notes: 1,
+    notesJa: 1, notes_ja: 1,
     targetGPS: 1, targetColor: 1, targetColour: 1, mma: 1
   };
   var BASIC_RESERVED = {
-    competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1
+    competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1,
+    notesJa: 1, notes_ja: 1, generalNotesJa: 1
   };
 
   function pushField(list, label, value, opts) {
     if (isBlank(value)) return;
     var f = { label: String(label), value: String(value).trim() };
     if (opts && opts.wide) f.wide = true;
+    if (opts && !isBlank(opts.valueJa)) f.valueJa = String(opts.valueJa).trim();
     list.push(f);
   }
 
-  /** 任意の形の fields（配列 or オブジェクト）を [{label,value}] に揃える */
+  /** 任意の形の fields（配列 or オブジェクト）を [{label,value,valueJa?}] に揃える。
+   *  valueJa はシート原文が長い自由記述の時だけ変換元(Claude)が添える和訳（無ければ辞書のみ）。 */
   function coerceFields(src) {
     var out = [];
     if (!src) return out;
@@ -209,7 +231,8 @@
         if (typeof f === 'string') { pushField(out, f, ''); return; }
         var label = f.label || f.name || f.key || f.en || '';
         var value = f.value !== undefined ? f.value : (f.val !== undefined ? f.val : '');
-        pushField(out, label, value, { wide: !!f.wide });
+        var valueJa = firstOf(f.valueJa, f.value_ja, f.ja, '');
+        pushField(out, label, value, { wide: !!f.wide, valueJa: valueJa });
       });
     } else if (typeof src === 'object') {
       Object.keys(src).forEach(function (k) { pushField(out, humanize(k), src[k]); });
@@ -276,6 +299,7 @@
       scoringPeriodStart: firstOf(t.scoringPeriodStart, ''),
       scoringPeriodEnd: firstOf(t.scoringPeriodEnd, ''),
       notes: firstOf(t.notes, ''),
+      notesJa: firstOf(t.notesJa, t.notes_ja, ''),
       targets: normalizeTargets(t),
       fields: coerceFields(t.fields)
     };
@@ -320,6 +344,7 @@
       competitionName: firstOf(b.competitionName, b.CompetitionName, CFG.eventName, ''),
       date: firstOf(b.date, ''),
       notes: firstOf(b.notes, b.generalNotes, ''),
+      notesJa: firstOf(b.notesJa, b.notes_ja, b.generalNotesJa, ''),
       fields: coerceFields(b.fields)
     };
     Object.keys(V1_BASIC).forEach(function (k) { pushField(info.fields, V1_BASIC[k], b[k]); });
@@ -417,9 +442,10 @@
     return isFinite(updTime) && isFinite(seenTime) && updTime > seenTime;
   }
 
+  /** state.flights は新しい順（登録が新しいフライトが先頭）に揃えてある前提 */
   function pickActiveFlight() {
     if (state.activeFlight && state.flights.some(function (f) { return f.key === state.activeFlight; })) return;
-    state.activeFlight = state.flights.length ? state.flights[state.flights.length - 1].key : '';
+    state.activeFlight = state.flights.length ? state.flights[0].key : '';
   }
 
   function restoreFromCache() {
@@ -478,7 +504,10 @@
     return apiGet('flights')
       .then(function (res) {
         if (!res || res.ok === false) throw new Error((res && res.error) || 'サーバーがエラーを返しました');
-        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; });
+        // サーバーは登録順（古い→新しい）で返す。フライト切替バーと自動選択は
+        // 「タスクシートの日付が新しいものが先頭」にしたいので反転する。
+        // 訂正登録は既存行を上書きするだけで並びは動かないため、登録順＝日付順という前提でよい。
+        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; }).reverse();
         state.sketchTaskNos = res.sketchTaskNos || [];
         safeSet(LS.flightsIndex, JSON.stringify(state.flights));
         safeSet(LS.sketchIdx, JSON.stringify(state.sketchTaskNos));
@@ -507,21 +536,48 @@
     if (!state.flightData[key] && state.online && key !== LOCAL_KEY) fetchFlight(key);
   }
 
+  /** 原本タスクシートは複数ページ（image_<key>_1, _2, ...）に対応する */
   function loadImage() {
     var key = state.activeFlight;
-    if (state.image) { state.screen = 'image'; render(); return; }
-    var cached = safeGet(LS.imagePrefix + key);
-    if (cached) { state.image = cached; state.screen = 'image'; render(); return; }
+    var meta = state.flights.filter(function (f) { return f.key === key; })[0];
+    var total = (meta && meta.imagePages) || 0;
     state.screen = 'image';
+
+    if (total === 0) { state.images = []; render(); return; }
+
+    var cached = [];
+    for (var i = 1; i <= total; i++) {
+      var c = safeGet(LS.imagePrefix + key + '.' + i);
+      if (!c) { cached = null; break; }
+      cached.push(c);
+    }
+    if (cached) { state.images = cached; render(); return; }
+
+    state.images = [];
     state.syncing = true;
     render();
-    apiGet('image', { key: key })
-      .then(function (res) {
-        state.image = (res && res.image) || null;
-        if (state.image) safeSet(LS.imagePrefix + key, state.image);
-      })
-      .catch(function (e) { state.syncError = e.message || String(e); })
-      .then(function () { state.syncing = false; render(); });
+
+    var results = new Array(total);
+    var remaining = total;
+    var anyFailed = false;
+    function loadPage(page) {
+      apiGet('image', { key: key, page: page })
+        .then(function (res) {
+          var img = (res && res.image) || null;
+          results[page - 1] = img;
+          if (img) safeSet(LS.imagePrefix + key + '.' + page, img);
+        })
+        .catch(function () { anyFailed = true; })
+        .then(function () {
+          remaining--;
+          if (remaining > 0) return;
+          state.images = results.filter(function (x) { return !!x; });
+          state.syncing = false;
+          if (anyFailed && !state.images.length) state.syncError = '画像の取得に失敗しました';
+          render();
+        });
+    }
+    for (var p = 1; p <= total; p++) loadPage(p);
   }
 
   function loadSketch(taskNo) {
@@ -592,7 +648,7 @@
     var d = entry && entry.data;
 
     var actions =
-      (meta && meta.hasImage ? '<button class="btn-small" data-act="image">原本</button>' : '') +
+      (meta && meta.imagePages > 0 ? '<button class="btn-small" data-act="image">原本</button>' : '') +
       '<button class="btn-small" data-act="rules">📖</button>' +
       '<button class="btn-small" data-act="sync">' + (state.syncing ? '…' : '↻') + '</button>' +
       '<button class="btn-small light" data-act="screen" data-screen="settings">⚙</button>';
@@ -641,9 +697,19 @@
     return out ? '<div style="margin-bottom:12px">' + out + '</div>' : '';
   }
 
+  /** 注記: 和訳が添えられていれば日本語を上、シート原文の英語を下に二重表記する */
+  function renderNotes(notes, notesJa) {
+    if (isBlank(notes)) return '';
+    if (!isBlank(notesJa)) {
+      return '<div class="notes"><div class="notes-ja">📝 ' + esc(notesJa) + '</div>' +
+        '<div class="notes-en">' + esc(notes) + '</div></div>';
+    }
+    return '<div class="notes">📝 ' + esc(notes) + '</div>';
+  }
+
   function renderBasic(info) {
     var open = !!state.open.basic;
-    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide); }).join('');
+    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
     if (!rows && !info.notes) return '';
     return '<div class="card">' +
       '<div class="card-header" data-act="toggle" data-key="basic">' +
@@ -651,7 +717,7 @@
         '<span class="chevron">' + (open ? '▲' : '▼') + '</span>' +
       '</div>' +
       (open ? '<div class="card-body">' + rows +
-        (info.notes ? '<div class="notes">📝 ' + esc(info.notes) + '</div>' : '') +
+        renderNotes(info.notes, info.notesJa) +
         '</div>' : '') +
       '</div>';
   }
@@ -686,9 +752,9 @@
       body += renderTargets(task);
       if (!isBlank(task.markerColor)) body += renderRow('Marker Colour', task.markerColor);
       if (!isBlank(task.markerDrop)) body += renderRow('Marker Drop', task.markerDrop);
-      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide); }).join('');
+      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
       body += renderTimer(task);
-      if (!isBlank(task.notes)) body += '<div class="notes">📝 ' + esc(task.notes) + '</div>';
+      body += renderNotes(task.notes, task.notesJa);
       body += renderAttach(task);
       body += '</div>';
     }
@@ -706,11 +772,13 @@
     return /^task/i.test(no) ? no : 'Task ' + no;
   }
 
-  /** ラベル1行: 日本語を大きく、タスクシートの英語原文を小さく */
-  function renderRow(label, value, wide) {
+  /** ラベル1行: 日本語を大きく、タスクシートの英語原文を小さく
+   *  valueJa は辞書に無い自由記述の和訳（変換時にClaudeが添えたもの）。辞書一致が無い時だけ使う。 */
+  function renderRow(label, value, wide, valueJa) {
     if (isBlank(value)) return '';
     var L = lookupLabel(label);
     var V = lookupValue(value);
+    if (!V.known && !isBlank(valueJa)) V = { ja: valueJa, en: value, known: true, color: V.color };
     var labelHtml = '<span class="label-ja">' + esc(L.ja) +
       (L.known ? '' : '<span class="unknown-flag">辞書外</span>') + '</span>' +
       (L.en ? '<span class="label-en">' + esc(L.en) + '</span>' : '');
@@ -870,9 +938,13 @@
     var meta = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
     var html = header('原本タスクシート', meta ? meta.label : 'Original Task Sheet', '', 'view');
     if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
-    if (!state.image) return html + '<div class="center-note">画像がありません' +
+    if (!state.images || !state.images.length) return html + '<div class="center-note">画像がありません' +
       (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
-    return html + '<div class="viewer"><img src="' + esc(state.image) + '" alt="原本タスクシート"></div>';
+    var multi = state.images.length > 1;
+    return html + '<div class="viewer">' + state.images.map(function (img, i) {
+      return (multi ? '<div class="viewer-page-label">' + (i + 1) + ' / ' + state.images.length + '</div>' : '') +
+        '<img src="' + esc(img) + '" alt="原本タスクシート ' + (i + 1) + 'ページ目">';
+    }).join('') + '</div>';
   }
 
   function viewSketch() {
@@ -978,10 +1050,10 @@
           if (!parsed.tasks) throw new Error('tasks が含まれていません');
           var updatedAt = new Date().toISOString();
           state.flights = state.flights.filter(function (f) { return f.key !== LOCAL_KEY; });
-          state.flights.push({
+          state.flights.unshift({
             key: LOCAL_KEY, label: '手動入力（この端末のみ）',
             date: (parsed.basicInfo && parsed.basicInfo.date) || '', updatedAt: updatedAt,
-            taskCount: (parsed.tasks || []).length, hasImage: false
+            taskCount: (parsed.tasks || []).length, imagePages: 0
           });
           state.flightData[LOCAL_KEY] = { raw: parsed, data: normalizeData(parsed), updatedAt: updatedAt };
           state.activeFlight = LOCAL_KEY;
@@ -1000,7 +1072,7 @@
           if (k.indexOf('tb.') === 0 && k !== LS.api) safeRemove(k);
         });
         state.flights = []; state.flightData = {}; state.activeFlight = '';
-        state.image = null; state.sketchCache = {}; state.sketchTaskNos = [];
+        state.images = []; state.sketchCache = {}; state.sketchTaskNos = [];
         state.lastSync = null;
         state.screen = 'view';
         render();
