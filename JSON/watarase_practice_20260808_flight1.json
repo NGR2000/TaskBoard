@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 2,
+  "_source": "渡良瀬練習フライトの実物タスクシート（Watarase Practice, Flight 1, 2026.8.8, Tasks #1-#5）をそのまま起こしたもの。",
+  "basicInfo": {
+    "competitionName": "Watarase Practice",
+    "date": "2026.8.8",
+    "fields": [
+      { "label": "Flight", "value": "1" },
+      { "label": "Tasks", "value": "#1, #2, #3, #4, #5" },
+      { "label": "Launch area", "value": "ILP" },
+      { "label": "Launch period", "value": "6:00" },
+      { "label": "PZs in force", "value": "all active" },
+      { "label": "Solo flight", "value": "not required" },
+      { "label": "Sunrise/Sunset", "value": "04:50 / 18:42" },
+      { "label": "Min. ILP → all goals", "value": "500m" },
+      { "label": "Next briefing", "value": "04:00" },
+      { "label": "QNH", "value": "10??" }
+    ]
+  },
+  "tasks": [
+    {
+      "taskNo": "1",
+      "taskId": "RTA",
+      "ruleNo": "15.10",
+      "scoringPeriodEnd": "06:30",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "1",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Description of scoring area(s)", "value": "S Gridline 0900 and N Gridline 1000",
+          "valueJa": "南グリッドライン0900、北グリッドライン1000" }
+      ],
+      "notes": "The pilot must declare, before take off, his flight duration from take off to the first track point inside the scoring area. The declaration must be in loggergoal #1 and have the following format: xxxx/mmss (where mm = minutes, ss = seconds and xxxxx will be ignored). The result is the difference in time between the declared duration and the actual duration. Smallest result is best.",
+      "notesJa": "パイロットは離陸前に、離陸からスコアリングエリア内の最初のトラックポイントまでの飛行時間を宣言しなければならない。宣言はロガーゴール#1で、次の形式で行うこと：xxxx/mmss（mm=分、ss=秒。xxxxx部分は無視される）。結果は、宣言した時間と実際の飛行時間との差。最小の結果が最良となる。"
+    },
+    {
+      "taskNo": "2",
+      "taskId": "PDG",
+      "ruleNo": "15.1",
+      "scoringPeriodEnd": "06:45",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "2",
+      "fields": [
+        { "label": "Task order", "value": "in any order" },
+        { "label": "Method of declaration", "value": "in loggergoal #2 or #3 before TO",
+          "valueJa": "ロガーゴール#2または#3で離陸前に宣言" },
+        { "label": "Number of goals permitted", "value": "2" },
+        { "label": "Goals available for declaration",
+          "value": "any coordinate and altitude, min. 0.5 km from goal of other task",
+          "valueJa": "任意の座標と高度（他タスクのゴールから最小0.5km離れていること）" },
+        { "label": "Minimum and maximum distances between declaration point and declared goal",
+          "value": "minimum 1km - no maximum",
+          "valueJa": "最小1km、最大なし" }
+      ]
+    },
+    {
+      "taskNo": "3",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "markerColor": "Orange",
+      "markerDrop": "free",
+      "scoringPeriodEnd": "06:30",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "3",
+      "mma": "R50m",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Position of various set goals/targets", "value": "113, 114, 115, 117, 118" }
+      ]
+    },
+    {
+      "taskNo": "4",
+      "taskId": "FON",
+      "ruleNo": "15.5",
+      "scoringPeriodEnd": "06:45",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "4",
+      "fields": [
+        { "label": "Task order", "value": "in order" },
+        { "label": "Method of declaration", "value": "in loggergoal #4, before mark of task #3",
+          "valueJa": "ロガーゴール#4で、タスク#3のマークより前に宣言" },
+        { "label": "Number of goals permitted", "value": "1" },
+        { "label": "Goals available for declaration",
+          "value": "any coordinate with altitude: altitude must be at least 500ft higher or lower than declaration point",
+          "valueJa": "高度指定付きの任意の座標：高度は宣言地点より500ft以上高いか低いこと" },
+        { "label": "Minimum and maximum distances between declaration point and declared goal",
+          "value": "min. 1.0km - no maximum",
+          "valueJa": "最小1.0km、最大なし" }
+      ]
+    },
+    {
+      "taskNo": "5",
+      "taskId": "FIN",
+      "ruleNo": "15.4",
+      "markerColor": "Green",
+      "markerDrop": "free",
+      "scoringPeriodEnd": "07:00",
+      "scoringArea": "entire contest area",
+      "loggerMarker": "5",
+      "targets": [
+        { "coordinates": "38140/1270", "altitude": "-50ft", "mma": "R50m" }
+      ],
+      "fields": [
+        { "label": "Task order", "value": "in order" }
+      ]
+    }
+  ]
+}
