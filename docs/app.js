@@ -442,9 +442,10 @@
     return isFinite(updTime) && isFinite(seenTime) && updTime > seenTime;
   }
 
+  /** state.flights は新しい順（登録が新しいフライトが先頭）に揃えてある前提 */
   function pickActiveFlight() {
     if (state.activeFlight && state.flights.some(function (f) { return f.key === state.activeFlight; })) return;
-    state.activeFlight = state.flights.length ? state.flights[state.flights.length - 1].key : '';
+    state.activeFlight = state.flights.length ? state.flights[0].key : '';
   }
 
   function restoreFromCache() {
@@ -503,7 +504,10 @@
     return apiGet('flights')
       .then(function (res) {
         if (!res || res.ok === false) throw new Error((res && res.error) || 'サーバーがエラーを返しました');
-        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; });
+        // サーバーは登録順（古い→新しい）で返す。フライト切替バーと自動選択は
+        // 「タスクシートの日付が新しいものが先頭」にしたいので反転する。
+        // 訂正登録は既存行を上書きするだけで並びは動かないため、登録順＝日付順という前提でよい。
+        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; }).reverse();
         state.sketchTaskNos = res.sketchTaskNos || [];
         safeSet(LS.flightsIndex, JSON.stringify(state.flights));
         safeSet(LS.sketchIdx, JSON.stringify(state.sketchTaskNos));
@@ -1046,7 +1050,7 @@
           if (!parsed.tasks) throw new Error('tasks が含まれていません');
           var updatedAt = new Date().toISOString();
           state.flights = state.flights.filter(function (f) { return f.key !== LOCAL_KEY; });
-          state.flights.push({
+          state.flights.unshift({
             key: LOCAL_KEY, label: '手動入力（この端末のみ）',
             date: (parsed.basicInfo && parsed.basicInfo.date) || '', updatedAt: updatedAt,
             taskCount: (parsed.tasks || []).length, imagePages: 0
