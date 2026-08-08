@@ -1,4 +1,6 @@
-.claude/
+.claude/*
+# ...except skills, which are meant to travel with the repo
+!.claude/skills/
 *.jpg
 *.JPG
 *.txt
