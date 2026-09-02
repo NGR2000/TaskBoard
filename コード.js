@@ -84,18 +84,18 @@ function doPost(e) {
         out = { ok: true, version: 3, write: true };
         break;
       case 'saveFlight':
-        out = saveFlight(body.key, body.label,
+        out = saveFlight(body.token, body.key, body.label,
           typeof body.data === 'string' ? body.data : JSON.stringify(body.data));
         break;
       case 'saveImage':
-        saveImageData(body.key, body.page, body.imageData);
+        saveImageData(body.token, body.key, body.page, body.imageData);
         out = { ok: true, key: body.key, page: Number(body.page) || 1 };
         break;
       case 'clearImages':
         out = { ok: true, key: body.key, deleted: clearImages_(body.key) };
         break;
       case 'deleteFlight':
-        out = { ok: deleteFlight(body.key), key: body.key };
+        out = { ok: deleteFlight(body.token, body.key), key: body.key };
         break;
       case 'state':
         out = apiFlights_();
@@ -114,44 +114,80 @@ function doPost(e) {
 // =====================================================================
 var PROP_TOKEN = 'TASKBOARD_API_TOKEN';
 
-/** 無ければ生成して保存する。Web 画面には絶対に出さない（下の注意書きを参照）。 */
+/**
+ * 未設定なら空文字を返す。設定は「プロジェクトの設定 → スクリプト プロパティ」から
+ * 手で入れる（32文字以上のランダムな文字列）。
+ *
+ * ここに「無ければ自動生成する」処理を置いてはいけない。値を確認する手段が
+ * 必要になり、その手段（関数）は google.script.run から誰でも呼べてしまうため。
+ * スクリプト プロパティの画面は Google アカウントで保護されている唯一の場所。
+ */
 function getApiToken_() {
-  var props = PropertiesService.getScriptProperties();
-  var token = props.getProperty(PROP_TOKEN);
-  if (!token) {
-    token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
-    props.setProperty(PROP_TOKEN, token);
-  }
-  return token;
+  return PropertiesService.getScriptProperties().getProperty(PROP_TOKEN) || '';
+}
+
+/** 未設定の時は誰も通さない（設定し忘れが「素通し」にならないように） */
+function tokenMatches_(given) {
+  var expected = getApiToken_();
+  return !!expected && secureEquals_(given, expected);
+}
+
+// =====================================================================
+// 管理画面のパスフレーズ
+//
+// /exec は「アクセスできるユーザー: 全員」でデプロイされている（クルー用アプリが
+// 匿名で読むため必須）。その結果、URL を知っていれば誰でも管理画面を開けてしまう。
+// クルーに配ったブックマークを変えずに守るため、URL ではなくパスフレーズで守る。
+//
+// 未設定の間は今まで通り誰でも操作できる（設定し忘れた状態でいきなり締め出されると、
+// 競技中に入力担当が何もできなくなるため）。設定するまで管理画面に警告を出す。
+// =====================================================================
+var PROP_ADMIN_PASS = 'TASKBOARD_ADMIN_PASS';
+
+/**
+ * 合言葉の設定・変更・解除は「プロジェクトの設定 → スクリプト プロパティ」から行う。
+ *
+ * ここに setAdminPassword() のような関数を置いてはいけない。google.script.run は
+ * 末尾に _ が付かない全ての関数を呼べるので、その関数を置いた時点で
+ * URL を知っている人が合言葉を書き換えたり消したりできてしまい、
+ * この仕組み全体が意味を失う。
+ */
+function getAdminPass_() {
+  return PropertiesService.getScriptProperties().getProperty(PROP_ADMIN_PASS) || '';
 }
 
 /**
- * トークンを確認するときは、この関数を Apps Script エディタから実行して
- * 実行ログを見ること。
+ * 書き込み系はすべてこれを通す。
  *
- * 管理画面（doGet）に出してはいけない。デプロイの「アクセスできるユーザー」が
- * 「全員」なので、画面に出すと URL を知っている人全員がトークンを読めてしまう。
+ * 画面側で入力欄を隠すだけでは意味がない（google.script.run はブラウザの
+ * コンソールから直接呼べるので、UI を経由せず resetAllData を叩ける）。
+ * だから関数そのものの入口で確認する。
  */
-function showApiToken() {
-  Logger.log(getApiToken_());
-}
-
-/** トークンが漏れた時はこれをエディタから実行して作り直す（古いトークンは即無効になる）。 */
-function regenerateApiToken() {
-  PropertiesService.getScriptProperties().deleteProperty(PROP_TOKEN);
-  Logger.log(getApiToken_());
+function requireWriteAuth_(auth) {
+  var pass = getAdminPass_();
+  if (!pass) return true;                    // 未設定なら従来どおり
+  if (secureEquals_(auth, pass)) return true;
+  if (secureEquals_(auth, getApiToken_())) return true; // publish.py 用のトークンでも通す
+  // 総当たりを遅くする。締め出し（ロックアウト）にはしない —— 競技中に
+  // 嫌がらせで入力担当が使えなくなる方が、この用途では困るため。
+  Utilities.sleep(1000);
+  throw new Error('合言葉が違います。管理画面を開き直して入力し直してください。');
 }
 
 /** 一致しなくても途中で return しない（応答時間から桁を推測されにくくするため） */
-function tokenMatches_(given) {
-  var expected = getApiToken_();
-  var got = String(given == null ? '' : given);
-  if (got.length !== expected.length) return false;
+function secureEquals_(given, expected) {
+  var a = String(given == null ? '' : given);
+  var b = String(expected == null ? '' : expected);
+  if (a.length !== b.length) return false;
   var diff = 0;
-  for (var i = 0; i < expected.length; i++) {
-    diff |= got.charCodeAt(i) ^ expected.charCodeAt(i);
+  for (var i = 0; i < b.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;
+}
+
+function tokenMatches_(given) {
+  return secureEquals_(given, getApiToken_());
 }
 
 /** そのフライトの原本ページを全部消す（再アップ時に古いページが残らないように） */
@@ -368,7 +404,8 @@ function getSketchData(taskNo) {
  * key が既存フライトと一致する場合は上書き（訂正の再登録）、
  * 一致しなければ新規フライトとして末尾に追加される。
  */
-function saveFlight(key, label, dataStr) {
+function saveFlight(auth, key, label, dataStr) {
+  requireWriteAuth_(auth);
   var parsed = JSON.parse(dataStr); // 壊れた JSON はここで弾く
   if (!parsed || !parsed.tasks) throw new Error('tasks が含まれていません');
 
@@ -404,7 +441,8 @@ function suggestLabel_(parsed) {
   return 'Flight ' + new Date().toLocaleString('ja-JP');
 }
 
-function deleteFlight(key) {
+function deleteFlight(auth, key) {
+  requireWriteAuth_(auth);
   var sheet = getFlightsSheet_();
   var rows = readFlightRows_();
   for (var i = 0; i < rows.length; i++) {
@@ -422,7 +460,8 @@ function deleteFlight(key) {
 }
 
 /** 原本タスクシートの1ページぶんを保存する。page を省略すると1ページ目。 */
-function saveImageData(key, page, imageData) {
+function saveImageData(auth, key, page, imageData) {
+  requireWriteAuth_(auth);
   if (!key) throw new Error('フライトが選択されていません');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var name = IMAGE_PREFIX + key + '_' + (Number(page) || 1);
@@ -432,7 +471,8 @@ function saveImageData(key, page, imageData) {
 }
 
 /** 原本タスクシートの最後のページを削除する（途中のページは削除できない設計）。 */
-function deleteLastImagePage(key) {
+function deleteLastImagePage(auth, key) {
+  requireWriteAuth_(auth);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var n = countImagePages_(ss, key);
   if (n === 0) return false;
@@ -441,7 +481,8 @@ function deleteLastImagePage(key) {
   return true;
 }
 
-function saveSketchData(taskNo, imageData) {
+function saveSketchData(auth, taskNo, imageData) {
+  requireWriteAuth_(auth);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var name = SKETCH_PREFIX + String(taskNo || '');
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
@@ -449,14 +490,26 @@ function saveSketchData(taskNo, imageData) {
   return true;
 }
 
-function deleteSketchData(taskNo) {
+function deleteSketchData(auth, taskNo) {
+  requireWriteAuth_(auth);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SKETCH_PREFIX + String(taskNo || ''));
   if (sheet) sheet.clearContents();
   return true;
 }
 
-/** 管理画面の初期表示用。画像 base64 は返さない（有無だけ） */
-function getAdminState() {
+/**
+ * 管理画面の初期表示用。画像 base64 は返さない（有無だけ）。
+ *
+ * 合言葉が設定されていて一致しない時は locked を返すだけにする。ここで
+ * 例外を投げないのは、画面側で「入力し直してください」と出したいため。
+ */
+function getAdminState(auth) {
+  var pass = getAdminPass_();
+  if (pass && !secureEquals_(auth, pass) && !secureEquals_(auth, getApiToken_())) {
+    Utilities.sleep(1000); // 総当たりを遅くする
+    return { ok: false, locked: true };
+  }
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var rows = readFlightRows_();
   var flights = rows.map(function (r) {
@@ -474,12 +527,15 @@ function getAdminState() {
     flights: flights,
     sketchTaskNos: listSketchTaskNos_(ss),
     execUrl: getExecUrl_(),
-    appUrl: APP_URL
+    appUrl: APP_URL,
+    // 合言葉が未設定なら画面に警告を出させる（URL を知っている人は誰でも操作できる状態）
+    needsPassword: !pass
   };
 }
 
 /** 大会全体のリセット（全フライト・全画像・全スケッチを削除）。管理画面のみから呼ぶ。 */
-function resetAllData() {
+function resetAllData(auth) {
+  requireWriteAuth_(auth);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var flightsSheet = ss.getSheetByName(SHEET_FLIGHTS);
   if (flightsSheet) ss.deleteSheet(flightsSheet);

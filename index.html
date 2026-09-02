@@ -51,7 +51,22 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <small>入力・管理用。閲覧はクルー用アプリで行います</small>
 </div>
 
-<div class="wrap">
+<div class="wrap" id="lockScreen" style="display:none">
+  <h2>合言葉</h2>
+  <div class="hint" style="margin-top:0">
+    このURLは誰でも開けてしまうため、操作する前に合言葉を確認しています。<br>
+    一度入力すればこの端末では記憶されるので、次回からは聞かれません。
+  </div>
+  <label class="field">合言葉</label>
+  <input type="password" id="passInput" autocomplete="current-password"
+         style="width:100%;padding:10px 11px;border-radius:9px;border:2px solid #ccc;font-size:16px;outline:none">
+  <button class="btn btn-primary" style="margin-top:9px" onclick="unlock()">開く</button>
+  <div id="lockMsg"></div>
+</div>
+
+<div class="wrap" id="mainScreen">
+
+  <div id="noPassWarning"></div>
 
   <h2>1. クルーに配るリンク</h2>
   <div class="share">
@@ -148,11 +163,50 @@ function copyShare() {
   }
 }
 
+/**
+ * 合言葉。GAS 側で設定されている時だけ必要になる。
+ * 端末に覚えさせるので、入力担当が入力するのは端末ごとに1回だけ。
+ */
+function adminPass() {
+  try { return localStorage.getItem('tb.adminPass') || ''; } catch (e) { return ''; }
+}
+function rememberPass(value) {
+  try { localStorage.setItem('tb.adminPass', value); } catch (e) { /* 保存できなくても動く */ }
+}
+
+function showLock(message) {
+  document.getElementById('lockScreen').style.display = '';
+  document.getElementById('mainScreen').style.display = 'none';
+  msg('lockMsg', message || '', 'err');
+  var input = document.getElementById('passInput');
+  if (input) input.focus();
+}
+
+function unlock() {
+  var value = document.getElementById('passInput').value;
+  if (!value) return;
+  google.script.run
+    .withSuccessHandler(function (s) {
+      if (s && s.locked) { showLock('合言葉が違います'); return; }
+      rememberPass(value);
+      document.getElementById('lockScreen').style.display = 'none';
+      document.getElementById('mainScreen').style.display = '';
+      adminState = s;
+      renderState();
+    })
+    .withFailureHandler(function (e) { showLock('確認に失敗: ' + e.message); })
+    .getAdminState(value);
+}
+
 function refresh() {
   google.script.run
-    .withSuccessHandler(function (s) { adminState = s; renderState(); })
+    .withSuccessHandler(function (s) {
+      if (s && s.locked) { showLock(adminPass() ? '合言葉が変わったようです' : ''); return; }
+      adminState = s;
+      renderState();
+    })
     .withFailureHandler(function (e) { msg('jsonMsg', '状態の取得に失敗: ' + e.message, 'err'); })
-    .getAdminState();
+    .getAdminState(adminPass());
 }
 
 function renderShare() {
@@ -175,6 +229,13 @@ function renderState() {
   EXEC_URL = s.execUrl || '';
   APP_URL = s.appUrl || '';
   renderShare();
+
+  // 合言葉が未設定＝このURLを知っている人は誰でも削除・リセットまでできる状態
+  document.getElementById('noPassWarning').innerHTML = s.needsPassword
+    ? '<div class="msg err" style="margin:0 0 10px">⚠️ この画面は今、URLを知っている人なら誰でも開けます。' +
+      'Apps Scriptの「プロジェクトの設定 → スクリプト プロパティ」で <b>TASKBOARD_ADMIN_PASS</b> に合言葉を設定すると、' +
+      '合言葉を知っている人だけが操作できるようになります（クルーに配ったURLは変わりません）。</div>'
+    : '';
 
   // フライト選択セレクト
   var sel = document.getElementById('flightSelect');
@@ -277,7 +338,7 @@ function saveJson() {
       refresh();
     })
     .withFailureHandler(function (e) { msg('jsonMsg', '保存に失敗: ' + e.message, 'err'); })
-    .saveFlight(editingKey, label, JSON.stringify(parsed));
+    .saveFlight(adminPass(), editingKey, label, JSON.stringify(parsed));
 }
 
 function deleteFlight(key, label) {
@@ -285,7 +346,7 @@ function deleteFlight(key, label) {
   google.script.run
     .withSuccessHandler(function () { msg('jsonMsg', '「' + label + '」を削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('jsonMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteFlight(key);
+    .deleteFlight(adminPass(), key);
 }
 
 function compressImage(file, callback) {
@@ -331,7 +392,7 @@ function savePage(page, data) {
     google.script.run
       .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + page + ' を保存しました', 'ok'); resolve(); })
       .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); reject(e); })
-      .saveImageData(editingKey, page, data);
+      .saveImageData(adminPass(), editingKey, page, data);
   });
 }
 
@@ -385,7 +446,7 @@ function deleteLastImage() {
   google.script.run
     .withSuccessHandler(function () { msg('imageMsg', '最後のページを削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('imageMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteLastImagePage(editingKey);
+    .deleteLastImagePage(adminPass(), editingKey);
 }
 
 function upSketch(input, taskNo) {
@@ -396,7 +457,7 @@ function upSketch(input, taskNo) {
     google.script.run
       .withSuccessHandler(function () { msg('sketchMsg', '✅ Task ' + taskNo + ' のスケッチを保存しました', 'ok'); refresh(); })
       .withFailureHandler(function (e) { msg('sketchMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveSketchData(taskNo, data);
+      .saveSketchData(adminPass(), taskNo, data);
   });
 }
 
@@ -405,7 +466,7 @@ function delSketch(taskNo) {
   google.script.run
     .withSuccessHandler(function () { msg('sketchMsg', 'Task ' + taskNo + ' のスケッチを削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('sketchMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteSketchData(taskNo);
+    .deleteSketchData(adminPass(), taskNo);
 }
 
 function resetAll() {
@@ -414,7 +475,7 @@ function resetAll() {
   google.script.run
     .withSuccessHandler(function () { msg('resetMsg', 'リセットしました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('resetMsg', 'リセットに失敗: ' + e.message, 'err'); })
-    .resetAllData();
+    .resetAllData(adminPass());
 }
 
 document.addEventListener('click', function (ev) {

@@ -9,7 +9,8 @@
 
 API URL は既定で docs/config.js の apiUrl を読む。トークンは環境変数
 TASKBOARD_TOKEN から読む（--token でも渡せるが、シェル履歴に残るので非推奨）。
-トークンは Apps Script エディタで showApiToken() を実行すると確認できる。
+トークンは Apps Script の「プロジェクトの設定 → スクリプト プロパティ」の
+TASKBOARD_API_TOKEN と同じ値を入れる。
 """
 
 import argparse
@@ -71,7 +72,7 @@ def post(api, token, payload):
         reason = out.get('error', '不明')
         if reason == 'unauthorized':
             die('トークンが一致しません。TASKBOARD_TOKEN を確認してください'
-                '（Apps Script エディタで showApiToken() を実行すると現在の値が出ます）。')
+                '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
         die('APIがエラーを返しました: ' + str(reason))
     return out
 
@@ -127,7 +128,7 @@ def main():
     token = args.token or os.environ.get('TASKBOARD_TOKEN', '')
     if not token and not args.dry_run:
         die('トークンがありません。環境変数 TASKBOARD_TOKEN に設定してください'
-            '（Apps Script エディタで showApiToken() を実行すると確認できます）。')
+            '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
 
     try:
         with open(args.json, encoding='utf-8') as fh:

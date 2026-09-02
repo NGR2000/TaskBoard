@@ -9,7 +9,7 @@ Take a task sheet from file to live on the crew app without the user touching th
 
 ## What has to be in place
 
-The publish step needs a write token. Check `TASKBOARD_TOKEN` is set before doing any work — if it's missing, stop and tell the user to set it in their Claude Code environment settings (the token comes from running `showApiToken()` in the Apps Script editor). Don't ask them to paste it into the chat; it ends up in the transcript.
+The publish step needs a write token. Check `TASKBOARD_TOKEN` is set before doing any work — if it's missing, stop and tell the user to set it in their Claude Code environment settings (the token is the `TASKBOARD_API_TOKEN` value under Apps Script → Project Settings → Script Properties). Don't ask them to paste it into the chat; it ends up in the transcript.
 
 The backend also needs a deployment that includes `doPost` in `コード.js`. If publishing fails with a non-JSON response or "unknown action", their deployed version predates the write API — they need `clasp push` and a new deployment version.
 
