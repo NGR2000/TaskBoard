@@ -49,6 +49,14 @@ python3 tools/publish.py --json <flight.json> --original <sheet.pdf> [--key <exi
 
 The tool reads the API URL from `docs/config.js` and the token from `TASKBOARD_TOKEN`, converts PDF pages (or images) to the same JPEG page format the admin panel produces, registers the flight, then uploads the pages in order. By default it replaces existing original pages so a re-run doesn't leave stale ones behind; `--keep-images` appends instead.
 
+When the flight is already registered and only the original is missing — the sheet PDF often arrives after the data — drop `--json` and pass `--key` instead:
+
+```bash
+python3 tools/publish.py --key <existing-key> --original <sheet.pdf>
+```
+
+That uploads pages without touching the registered tasks or the label. Prefer it over re-publishing the whole flight, since re-saving with a blank `--label` would regenerate the label from the JSON and clobber a name the user chose by hand.
+
 Use `--dry-run` first if anything about the target flight is uncertain — it reports what would happen without sending.
 
 Report back what actually landed: the tool prints the post-publish state (label, task count, page count). If the page count doesn't match what you uploaded, say so rather than declaring success.

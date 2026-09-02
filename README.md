@@ -137,6 +137,8 @@ python3 tools/publish.py --json flight.json --original tds.pdf
 - 原本の PDF はページごとに画像化してから、Aと同じ保存先に入る（クルー側の見え方は同じ）
 - 既存フライトを直す時は `--key <既存のkey>` を付ける。付けなければ新規フライトになる
 - 迷ったら `--dry-run` で送信せず内容だけ確認できる
+- 登録済みフライトに**原本だけ後から足す**場合は `--json` を省く（タスク内容とラベルには触らない）:
+  `python3 tools/publish.py --key <既存のkey> --original tds.pdf`
 
 #### 初回だけ必要な準備
 
