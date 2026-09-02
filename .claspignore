@@ -10,5 +10,7 @@ docs/**
 docs/
 .claude/**
 .claude/
+tools/**
+tools/
 memory/**
 memory/

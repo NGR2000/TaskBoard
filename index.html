@@ -43,6 +43,7 @@ label.field { display:block; font-size:12px; font-weight:bold; color:#555; margi
 .flight-empty { text-align:center; padding:30px 10px; color:#999; font-size:13px; }
 select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; background:#fff; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -50,7 +51,22 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <small>入力・管理用。閲覧はクルー用アプリで行います</small>
 </div>
 
-<div class="wrap">
+<div class="wrap" id="lockScreen" style="display:none">
+  <h2>合言葉</h2>
+  <div class="hint" style="margin-top:0">
+    このURLは誰でも開けてしまうため、操作する前に合言葉を確認しています。<br>
+    一度入力すればこの端末では記憶されるので、次回からは聞かれません。
+  </div>
+  <label class="field">合言葉</label>
+  <input type="password" id="passInput" autocomplete="current-password"
+         style="width:100%;padding:10px 11px;border-radius:9px;border:2px solid #ccc;font-size:16px;outline:none">
+  <button class="btn btn-primary" style="margin-top:9px" onclick="unlock()">開く</button>
+  <div id="lockMsg"></div>
+</div>
+
+<div class="wrap" id="mainScreen">
+
+  <div id="noPassWarning"></div>
 
   <h2>1. クルーに配るリンク</h2>
   <div class="share">
@@ -85,11 +101,11 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <div id="flightList"><div class="status">確認中…</div></div>
 
   <h2>4. 原本タスクシート画像</h2>
-  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。タスクシートが複数ページにわたる場合は、ページの順番通りに「+ ページを追加」で1枚ずつ足してください。</div>
+  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。タスクシートが複数ページにわたる場合は、ページの順番通りに「+ ページを追加」で1枚ずつ足してください。PDFを選ぶと、含まれる全ページを自動でその順番のまま追加します。</div>
   <div class="row">
     <span id="imageStatus" class="status">確認中…</span>
     <div style="display:flex;gap:6px">
-      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
+      <input type="file" id="imageInput" accept="image/*,application/pdf" style="display:none" onchange="uploadImage(this)">
       <button class="btn-small" onclick="document.getElementById('imageInput').click()">+ ページを追加</button>
       <button class="btn-danger-outline" id="deleteImageBtn" onclick="deleteLastImage()" style="display:none">最後のページを削除</button>
     </div>
@@ -110,6 +126,10 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
 </div>
 
 <script>
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 // URL はサーバー側（getAdminState）から受け取る
 var EXEC_URL = '';
 var APP_URL = '';
@@ -143,11 +163,50 @@ function copyShare() {
   }
 }
 
+/**
+ * 合言葉。GAS 側で設定されている時だけ必要になる。
+ * 端末に覚えさせるので、入力担当が入力するのは端末ごとに1回だけ。
+ */
+function adminPass() {
+  try { return localStorage.getItem('tb.adminPass') || ''; } catch (e) { return ''; }
+}
+function rememberPass(value) {
+  try { localStorage.setItem('tb.adminPass', value); } catch (e) { /* 保存できなくても動く */ }
+}
+
+function showLock(message) {
+  document.getElementById('lockScreen').style.display = '';
+  document.getElementById('mainScreen').style.display = 'none';
+  msg('lockMsg', message || '', 'err');
+  var input = document.getElementById('passInput');
+  if (input) input.focus();
+}
+
+function unlock() {
+  var value = document.getElementById('passInput').value;
+  if (!value) return;
+  google.script.run
+    .withSuccessHandler(function (s) {
+      if (s && s.locked) { showLock('合言葉が違います'); return; }
+      rememberPass(value);
+      document.getElementById('lockScreen').style.display = 'none';
+      document.getElementById('mainScreen').style.display = '';
+      adminState = s;
+      renderState();
+    })
+    .withFailureHandler(function (e) { showLock('確認に失敗: ' + e.message); })
+    .getAdminState(value);
+}
+
 function refresh() {
   google.script.run
-    .withSuccessHandler(function (s) { adminState = s; renderState(); })
+    .withSuccessHandler(function (s) {
+      if (s && s.locked) { showLock(adminPass() ? '合言葉が変わったようです' : ''); return; }
+      adminState = s;
+      renderState();
+    })
     .withFailureHandler(function (e) { msg('jsonMsg', '状態の取得に失敗: ' + e.message, 'err'); })
-    .getAdminState();
+    .getAdminState(adminPass());
 }
 
 function renderShare() {
@@ -170,6 +229,13 @@ function renderState() {
   EXEC_URL = s.execUrl || '';
   APP_URL = s.appUrl || '';
   renderShare();
+
+  // 合言葉が未設定＝このURLを知っている人は誰でも削除・リセットまでできる状態
+  document.getElementById('noPassWarning').innerHTML = s.needsPassword
+    ? '<div class="msg err" style="margin:0 0 10px">⚠️ この画面は今、URLを知っている人なら誰でも開けます。' +
+      'Apps Scriptの「プロジェクトの設定 → スクリプト プロパティ」で <b>TASKBOARD_ADMIN_PASS</b> に合言葉を設定すると、' +
+      '合言葉を知っている人だけが操作できるようになります（クルーに配ったURLは変わりません）。</div>'
+    : '';
 
   // フライト選択セレクト
   var sel = document.getElementById('flightSelect');
@@ -272,7 +338,7 @@ function saveJson() {
       refresh();
     })
     .withFailureHandler(function (e) { msg('jsonMsg', '保存に失敗: ' + e.message, 'err'); })
-    .saveFlight(editingKey, label, JSON.stringify(parsed));
+    .saveFlight(adminPass(), editingKey, label, JSON.stringify(parsed));
 }
 
 function deleteFlight(key, label) {
@@ -280,7 +346,7 @@ function deleteFlight(key, label) {
   google.script.run
     .withSuccessHandler(function () { msg('jsonMsg', '「' + label + '」を削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('jsonMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteFlight(key);
+    .deleteFlight(adminPass(), key);
 }
 
 function compressImage(file, callback) {
@@ -307,17 +373,71 @@ function uploadImage(input) {
   var file = input.files[0];
   if (!file) return;
   if (!editingKey) { msg('imageMsg', '先にフライトを選んでください', 'err'); return; }
+  var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf) uploadPdf(file); else uploadImageFile(file);
+  input.value = '';
+}
+
+function uploadImageFile(file) {
   var f = currentFlight();
   var nextPage = (f ? f.imagePages : 0) + 1;
   msg('imageMsg', '圧縮中…', 'info');
-  compressImage(file, function (data) {
-    msg('imageMsg', 'ページ' + nextPage + ' を保存中…', 'info');
+  compressImage(file, function (data) { savePage(nextPage, data); });
+}
+
+/** ページを1枚保存する。Promise を返すので PDF の複数ページを順番に保存できる */
+function savePage(page, data) {
+  return new Promise(function (resolve, reject) {
+    msg('imageMsg', 'ページ' + page + ' を保存中…', 'info');
     google.script.run
-      .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + nextPage + ' を保存しました', 'ok'); refresh(); })
-      .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveImageData(editingKey, nextPage, data);
+      .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + page + ' を保存しました', 'ok'); resolve(); })
+      .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); reject(e); })
+      .saveImageData(adminPass(), editingKey, page, data);
   });
-  input.value = '';
+}
+
+/** PDF はサーバーに送らずブラウザ内で1ページずつ画像に描画してから、
+ *  既存の画像保存の仕組みにそのまま乗せる（GAS 側もクルー側アプリも変更不要）。 */
+function uploadPdf(file) {
+  if (typeof pdfjsLib === 'undefined') {
+    msg('imageMsg', 'PDFの読み込みライブラリを取得できませんでした。通信状態を確認してもう一度お試しください', 'err');
+    return;
+  }
+  var f = currentFlight();
+  var startPage = f ? f.imagePages : 0;
+  msg('imageMsg', 'PDFを読み込み中…', 'info');
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    pdfjsLib.getDocument({ data: new Uint8Array(e.target.result) }).promise.then(function (pdf) {
+      var total = pdf.numPages;
+      var chain = Promise.resolve();
+      var _loop = function (pageNum) {
+        chain = chain.then(function () {
+          return pdf.getPage(pageNum).then(function (page) {
+            var raw = page.getViewport({ scale: 1 });
+            var scale = Math.min(2, 1600 / Math.max(raw.width, raw.height));
+            var viewport = page.getViewport({ scale: scale });
+            var canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise
+              .then(function () { return savePage(startPage + pageNum, canvas.toDataURL('image/jpeg', 0.8)); });
+          });
+        });
+      };
+      for (var i = 1; i <= total; i++) _loop(i);
+      chain.then(function () {
+        msg('imageMsg', '✅ PDFの' + total + 'ページを保存しました', 'ok');
+        refresh();
+      }).catch(function (e) {
+        msg('imageMsg', '保存に失敗: ' + ((e && e.message) || e), 'err');
+        refresh();
+      });
+    }).catch(function (e) {
+      msg('imageMsg', 'PDFの読み込みに失敗: ' + e.message, 'err');
+    });
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function deleteLastImage() {
@@ -326,7 +446,7 @@ function deleteLastImage() {
   google.script.run
     .withSuccessHandler(function () { msg('imageMsg', '最後のページを削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('imageMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteLastImagePage(editingKey);
+    .deleteLastImagePage(adminPass(), editingKey);
 }
 
 function upSketch(input, taskNo) {
@@ -337,7 +457,7 @@ function upSketch(input, taskNo) {
     google.script.run
       .withSuccessHandler(function () { msg('sketchMsg', '✅ Task ' + taskNo + ' のスケッチを保存しました', 'ok'); refresh(); })
       .withFailureHandler(function (e) { msg('sketchMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveSketchData(taskNo, data);
+      .saveSketchData(adminPass(), taskNo, data);
   });
 }
 
@@ -346,7 +466,7 @@ function delSketch(taskNo) {
   google.script.run
     .withSuccessHandler(function () { msg('sketchMsg', 'Task ' + taskNo + ' のスケッチを削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('sketchMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteSketchData(taskNo);
+    .deleteSketchData(adminPass(), taskNo);
 }
 
 function resetAll() {
@@ -355,7 +475,7 @@ function resetAll() {
   google.script.run
     .withSuccessHandler(function () { msg('resetMsg', 'リセットしました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('resetMsg', 'リセットに失敗: ' + e.message, 'err'); })
-    .resetAllData();
+    .resetAllData(adminPass());
 }
 
 document.addEventListener('click', function (ev) {
