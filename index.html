@@ -43,6 +43,7 @@ label.field { display:block; font-size:12px; font-weight:bold; color:#555; margi
 .flight-empty { text-align:center; padding:30px 10px; color:#999; font-size:13px; }
 select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; background:#fff; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -85,11 +86,11 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <div id="flightList"><div class="status">確認中…</div></div>
 
   <h2>4. 原本タスクシート画像</h2>
-  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。タスクシートが複数ページにわたる場合は、ページの順番通りに「+ ページを追加」で1枚ずつ足してください。</div>
+  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。タスクシートが複数ページにわたる場合は、ページの順番通りに「+ ページを追加」で1枚ずつ足してください。PDFを選ぶと、含まれる全ページを自動でその順番のまま追加します。</div>
   <div class="row">
     <span id="imageStatus" class="status">確認中…</span>
     <div style="display:flex;gap:6px">
-      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="uploadImage(this)">
+      <input type="file" id="imageInput" accept="image/*,application/pdf" style="display:none" onchange="uploadImage(this)">
       <button class="btn-small" onclick="document.getElementById('imageInput').click()">+ ページを追加</button>
       <button class="btn-danger-outline" id="deleteImageBtn" onclick="deleteLastImage()" style="display:none">最後のページを削除</button>
     </div>
@@ -110,6 +111,10 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
 </div>
 
 <script>
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 // URL はサーバー側（getAdminState）から受け取る
 var EXEC_URL = '';
 var APP_URL = '';
@@ -307,17 +312,71 @@ function uploadImage(input) {
   var file = input.files[0];
   if (!file) return;
   if (!editingKey) { msg('imageMsg', '先にフライトを選んでください', 'err'); return; }
+  var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf) uploadPdf(file); else uploadImageFile(file);
+  input.value = '';
+}
+
+function uploadImageFile(file) {
   var f = currentFlight();
   var nextPage = (f ? f.imagePages : 0) + 1;
   msg('imageMsg', '圧縮中…', 'info');
-  compressImage(file, function (data) {
-    msg('imageMsg', 'ページ' + nextPage + ' を保存中…', 'info');
+  compressImage(file, function (data) { savePage(nextPage, data); });
+}
+
+/** ページを1枚保存する。Promise を返すので PDF の複数ページを順番に保存できる */
+function savePage(page, data) {
+  return new Promise(function (resolve, reject) {
+    msg('imageMsg', 'ページ' + page + ' を保存中…', 'info');
     google.script.run
-      .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + nextPage + ' を保存しました', 'ok'); refresh(); })
-      .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveImageData(editingKey, nextPage, data);
+      .withSuccessHandler(function () { msg('imageMsg', '✅ ページ' + page + ' を保存しました', 'ok'); resolve(); })
+      .withFailureHandler(function (e) { msg('imageMsg', '保存に失敗: ' + e.message, 'err'); reject(e); })
+      .saveImageData(editingKey, page, data);
   });
-  input.value = '';
+}
+
+/** PDF はサーバーに送らずブラウザ内で1ページずつ画像に描画してから、
+ *  既存の画像保存の仕組みにそのまま乗せる（GAS 側もクルー側アプリも変更不要）。 */
+function uploadPdf(file) {
+  if (typeof pdfjsLib === 'undefined') {
+    msg('imageMsg', 'PDFの読み込みライブラリを取得できませんでした。通信状態を確認してもう一度お試しください', 'err');
+    return;
+  }
+  var f = currentFlight();
+  var startPage = f ? f.imagePages : 0;
+  msg('imageMsg', 'PDFを読み込み中…', 'info');
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    pdfjsLib.getDocument({ data: new Uint8Array(e.target.result) }).promise.then(function (pdf) {
+      var total = pdf.numPages;
+      var chain = Promise.resolve();
+      var _loop = function (pageNum) {
+        chain = chain.then(function () {
+          return pdf.getPage(pageNum).then(function (page) {
+            var raw = page.getViewport({ scale: 1 });
+            var scale = Math.min(2, 1600 / Math.max(raw.width, raw.height));
+            var viewport = page.getViewport({ scale: scale });
+            var canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise
+              .then(function () { return savePage(startPage + pageNum, canvas.toDataURL('image/jpeg', 0.8)); });
+          });
+        });
+      };
+      for (var i = 1; i <= total; i++) _loop(i);
+      chain.then(function () {
+        msg('imageMsg', '✅ PDFの' + total + 'ページを保存しました', 'ok');
+        refresh();
+      }).catch(function (e) {
+        msg('imageMsg', '保存に失敗: ' + ((e && e.message) || e), 'err');
+        refresh();
+      });
+    }).catch(function (e) {
+      msg('imageMsg', 'PDFの読み込みに失敗: ' + e.message, 'err');
+    });
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function deleteLastImage() {
