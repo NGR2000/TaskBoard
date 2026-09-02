@@ -5,3 +5,5 @@
 *.JPG
 *.txt
 ref/
+__pycache__/
+*.pyc

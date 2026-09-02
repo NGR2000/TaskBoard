@@ -1,9 +1,11 @@
 /**
  * TaskBoard — GAS 側
  *
- * 役割は 2 つだけ。
+ * 役割は 3 つ。
  *   1. 入力・管理画面（doGet に action が無い時）— 入力担当が使う。google.script.run なので確実に動く。
- *   2. 閲覧用の JSON API（doGet?action=...）— GitHub Pages の PWA が読む。GET のみ。
+ *   2. 閲覧用の JSON API（doGet?action=...）— GitHub Pages の PWA が読む。GET のみ。認証なし。
+ *   3. 書き込み API（doPost）— Claude から「変換 → 反映 → 原本アップ」を一気に行うための入口。
+ *      2 と違い必ずトークンを検証する（トークンは tools/publish.py を参照）。
  *
  * データモデル: 「フライト」単位で複数保持する。
  * 大会中はフライトが進むごとに新しいタスクデータシートが発表されるため、
@@ -57,6 +59,114 @@ function doGet(e) {
     out = { ok: false, error: String(err && err.message ? err.message : err) };
   }
   return reply_(out, p.callback);
+}
+
+/**
+ * 書き込み API。Claude などの外部ツールから
+ * 「変換 → 反映 → 原本アップ」を一気に行うための入口。
+ *
+ * doGet と違い、必ずトークンを検証する。/exec の URL は docs/config.js 経由で
+ * 公開されているので、URL を知っているだけでは書き込めないようにするため。
+ * リクエストは JSON ボディで { token, action, ... } を送る。
+ */
+function doPost(e) {
+  var out;
+  try {
+    var body = {};
+    if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
+
+    if (!tokenMatches_(body.token)) {
+      return reply_({ ok: false, error: 'unauthorized' });
+    }
+
+    switch (body.action) {
+      case 'ping':
+        out = { ok: true, version: 3, write: true };
+        break;
+      case 'saveFlight':
+        out = saveFlight(body.key, body.label,
+          typeof body.data === 'string' ? body.data : JSON.stringify(body.data));
+        break;
+      case 'saveImage':
+        saveImageData(body.key, body.page, body.imageData);
+        out = { ok: true, key: body.key, page: Number(body.page) || 1 };
+        break;
+      case 'clearImages':
+        out = { ok: true, key: body.key, deleted: clearImages_(body.key) };
+        break;
+      case 'deleteFlight':
+        out = { ok: deleteFlight(body.key), key: body.key };
+        break;
+      case 'state':
+        out = apiFlights_();
+        break;
+      default:
+        out = { ok: false, error: 'unknown action: ' + body.action };
+    }
+  } catch (err) {
+    out = { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+  return reply_(out);
+}
+
+// =====================================================================
+// 書き込み API のトークン
+// =====================================================================
+var PROP_TOKEN = 'TASKBOARD_API_TOKEN';
+
+/** 無ければ生成して保存する。Web 画面には絶対に出さない（下の注意書きを参照）。 */
+function getApiToken_() {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty(PROP_TOKEN);
+  if (!token) {
+    token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    props.setProperty(PROP_TOKEN, token);
+  }
+  return token;
+}
+
+/**
+ * トークンを確認するときは、この関数を Apps Script エディタから実行して
+ * 実行ログを見ること。
+ *
+ * 管理画面（doGet）に出してはいけない。デプロイの「アクセスできるユーザー」が
+ * 「全員」なので、画面に出すと URL を知っている人全員がトークンを読めてしまう。
+ */
+function showApiToken() {
+  Logger.log(getApiToken_());
+}
+
+/** トークンが漏れた時はこれをエディタから実行して作り直す（古いトークンは即無効になる）。 */
+function regenerateApiToken() {
+  PropertiesService.getScriptProperties().deleteProperty(PROP_TOKEN);
+  Logger.log(getApiToken_());
+}
+
+/** 一致しなくても途中で return しない（応答時間から桁を推測されにくくするため） */
+function tokenMatches_(given) {
+  var expected = getApiToken_();
+  var got = String(given == null ? '' : given);
+  if (got.length !== expected.length) return false;
+  var diff = 0;
+  for (var i = 0; i < expected.length; i++) {
+    diff |= got.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/** そのフライトの原本ページを全部消す（再アップ時に古いページが残らないように） */
+function clearImages_(key) {
+  if (!key) throw new Error('フライトが指定されていません');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var deleted = 0;
+  ss.getSheets().forEach(function (s) {
+    var name = s.getName();
+    if (name.indexOf(IMAGE_PREFIX + key + '_') === 0 || name === IMAGE_PREFIX + key) {
+      ss.deleteSheet(s);
+      deleted++;
+    }
+  });
+  return deleted;
 }
 
 /** CORS が塞がれた環境向けに JSONP も返せるようにしておく */
