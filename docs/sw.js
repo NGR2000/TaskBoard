@@ -7,7 +7,7 @@
  *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v3.3.1';
+var CACHE_VERSION = 'taskboard-v3.5.0';
 var SHELL = [
   './',
   './index.html',
@@ -15,8 +15,9 @@ var SHELL = [
   './app.js',
   './config.js',
   './manifest.webmanifest',
-  './icon.svg',
-  './icon-maskable.svg',
+  './apple-touch-icon.png',
+  './icon-192.png',
+  './favicon-32.png',
   './data/dictionary.json',
   './data/axmer2026-ch15.json'
 ];

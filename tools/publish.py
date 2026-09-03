@@ -110,7 +110,8 @@ def render_pages(paths):
 
 def main():
     ap = argparse.ArgumentParser(description='TaskBoard へフライトを反映する')
-    ap.add_argument('--json', required=True, help='反映するフライトJSONのパス')
+    ap.add_argument('--json', default='',
+                    help='反映するフライトJSONのパス。省略すると原本の追加だけを行う（--key が必要）')
     ap.add_argument('--original', nargs='*', default=[], help='原本のPDF/画像（複数可・この順でページになる）')
     ap.add_argument('--key', default='', help='既存フライトを上書きする時のkey（省略すると新規）')
     ap.add_argument('--label', default='', help='一覧に出す名前（省略するとJSONから自動生成）')
@@ -130,35 +131,51 @@ def main():
         die('トークンがありません。環境変数 TASKBOARD_TOKEN に設定してください'
             '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
 
-    try:
-        with open(args.json, encoding='utf-8') as fh:
-            raw = fh.read()
-        parsed = json.loads(raw)
-    except OSError as e:
-        die('JSONを読めませんでした: %s' % e)
-    except ValueError as e:
-        die('JSONとして壊れています: %s' % e)
+    # JSON を省略した時は「登録済みフライトに原本だけ足す」動き。
+    # 既に登録されている内容とラベルには一切触らない。
+    images_only = not args.json
+    if images_only:
+        if not args.key:
+            die('--json を省略する場合は --key で対象フライトを指定してください。')
+        if not args.original:
+            die('--json も --original も無いので、やることがありません。')
+        raw, parsed = '', {}
+    else:
+        try:
+            with open(args.json, encoding='utf-8') as fh:
+                raw = fh.read()
+            parsed = json.loads(raw)
+        except OSError as e:
+            die('JSONを読めませんでした: %s' % e)
+        except ValueError as e:
+            die('JSONとして壊れています: %s' % e)
 
-    if not parsed.get('tasks'):
-        die('tasks が入っていません。TaskBoard用のJSONか確認してください。')
+        if not parsed.get('tasks'):
+            die('tasks が入っていません。TaskBoard用のJSONか確認してください。')
 
     pages = render_pages(args.original) if args.original else []
 
     print('反映先: %s' % api)
-    print('タスク数: %d' % len(parsed['tasks']))
+    if images_only:
+        print('対象フライト: %s（原本のみ差し替え・タスク内容は触りません）' % args.key)
+    else:
+        print('タスク数: %d' % len(parsed['tasks']))
     print('原本ページ数: %d%s' % (len(pages), '（既存ページは貼り直し）' if pages and not args.keep_images else ''))
     if args.dry_run:
         print('--dry-run のため送信しませんでした。')
         return
 
-    saved = post(api, token, {
-        'action': 'saveFlight',
-        'key': args.key,
-        'label': args.label,
-        'data': raw,
-    })
-    key = saved.get('key', args.key)
-    print('✅ 登録しました: %s（%s / %s タスク）' % (key, saved.get('label', ''), saved.get('taskCount', '?')))
+    if images_only:
+        key = args.key
+    else:
+        saved = post(api, token, {
+            'action': 'saveFlight',
+            'key': args.key,
+            'label': args.label,
+            'data': raw,
+        })
+        key = saved.get('key', args.key)
+        print('✅ 登録しました: %s（%s / %s タスク）' % (key, saved.get('label', ''), saved.get('taskCount', '?')))
 
     if not pages:
         print('原本の指定が無いので、ここまでで完了です。')
