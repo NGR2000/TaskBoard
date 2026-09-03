@@ -16,6 +16,7 @@ h2:first-of-type { margin-top:6px; }
 .btn { display:block; width:100%; padding:13px 18px; margin-bottom:9px; border:none; border-radius:10px; font-size:15px; font-weight:bold; cursor:pointer; }
 .btn-primary { background:#1a1a1a; color:#fff; }
 .btn-secondary { background:#ececec; color:#1a1a1a; }
+.btn-inline { display:inline-block; width:auto; margin:0; padding:7px 12px; font-size:13px; border-radius:7px; border:none; cursor:pointer; }
 .btn-small { background:#3d3d3d; color:#fff; border:none; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; white-space:nowrap; }
 .btn-danger-outline { background:none; border:1px solid #cc0000; color:#cc0000; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; }
 .btn-ghost { background:none; border:1px solid #ddd; color:#aaa; padding:9px 18px; border-radius:7px; font-size:12px; cursor:pointer; }
@@ -36,6 +37,9 @@ label.field { display:block; font-size:12px; font-weight:bold; color:#555; margi
 .status { font-size:13px; color:#6b6b6b; }
 .flight-card { border:2px solid #1a1a1a; border-radius:10px; padding:11px 13px; margin-bottom:9px; }
 .flight-card.editing { border-color:#0066cc; background:#f2f7ff; }
+.flight-card.archived { border-color:#ccc; background:#fafafa; }
+.flight-card.archived .flight-label { color:#888; font-weight:normal; }
+.badge-archived { font-size:11px; background:#ececec; color:#666; border-radius:5px; padding:1px 6px; margin-left:6px; white-space:nowrap; }
 .flight-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .flight-label { font-size:15px; font-weight:bold; }
 .flight-sub { font-size:12px; color:#777; margin-top:2px; }
@@ -254,14 +258,23 @@ function renderState() {
   if (!s.flights.length) {
     list.innerHTML = '<div class="flight-empty">まだフライトが登録されていません。上のフォームから登録してください。</div>';
   } else {
-    list.innerHTML = s.flights.map(function (f) {
+    // アーカイブ済みは後ろにまとめる（並び自体はサーバーの登録順のまま）
+    var ordered = s.flights.filter(function (f) { return !f.archived; })
+      .concat(s.flights.filter(function (f) { return !!f.archived; }));
+    list.innerHTML = ordered.map(function (f) {
       var updated = f.updatedAt ? new Date(f.updatedAt).toLocaleString('ja-JP') : '-';
-      return '<div class="flight-card' + (f.key === editingKey ? ' editing' : '') + '">' +
+      var taskCount = (f.tasks || []).length;
+      return '<div class="flight-card' + (f.key === editingKey ? ' editing' : '') +
+        (f.archived ? ' archived' : '') + '">' +
         '<div class="flight-head">' +
-          '<div><div class="flight-label">' + esc(f.label) + '</div>' +
-          '<div class="flight-sub">' + esc(f.date || '') + '　' + f.taskCount + 'タスク　更新: ' + esc(updated) + '</div></div>' +
+          '<div><div class="flight-label">' + esc(f.label) +
+            (f.archived ? '<span class="badge-archived">アーカイブ済み</span>' : '') + '</div>' +
+          '<div class="flight-sub">' + esc(f.date || '') + '　' + taskCount + 'タスク　更新: ' + esc(updated) + '</div></div>' +
           '<div class="flight-actions">' +
             '<button class="btn-small" data-act="edit-flight" data-key="' + esc(f.key) + '">編集</button>' +
+            (f.archived
+              ? '<button class="btn-small" data-act="unarchive-flight" data-key="' + esc(f.key) + '" data-label="' + esc(f.label) + '">戻す</button>'
+              : '<button class="btn-secondary btn-inline" data-act="archive-flight" data-key="' + esc(f.key) + '" data-label="' + esc(f.label) + '">アーカイブ</button>') +
             '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '" data-label="' + esc(f.label) + '">削除</button>' +
           '</div>' +
         '</div></div>';
@@ -339,6 +352,16 @@ function saveJson() {
     })
     .withFailureHandler(function (e) { msg('jsonMsg', '保存に失敗: ' + e.message, 'err'); })
     .saveFlight(adminPass(), editingKey, label, JSON.stringify(parsed));
+}
+
+function setArchived(key, label, archived) {
+  google.script.run
+    .withSuccessHandler(function () {
+      msg('jsonMsg', '「' + label + '」を' + (archived ? 'アーカイブしました' : '通常に戻しました'), 'ok');
+      refresh();
+    })
+    .withFailureHandler(function (e) { msg('jsonMsg', '失敗: ' + e.message, 'err'); })
+    .setFlightArchived(adminPass(), key, archived);
 }
 
 function deleteFlight(key, label) {
@@ -485,6 +508,8 @@ document.addEventListener('click', function (ev) {
   switch (act) {
     case 'edit-flight': editFlight(node.getAttribute('data-key')); break;
     case 'delete-flight': deleteFlight(node.getAttribute('data-key'), node.getAttribute('data-label')); break;
+    case 'archive-flight': setArchived(node.getAttribute('data-key'), node.getAttribute('data-label'), true); break;
+    case 'unarchive-flight': setArchived(node.getAttribute('data-key'), node.getAttribute('data-label'), false); break;
     case 'delete-sketch': delSketch(node.getAttribute('data-taskno')); break;
     case 'pick-sketch': {
       var target = document.getElementById(node.getAttribute('data-target'));

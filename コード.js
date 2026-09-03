@@ -20,7 +20,9 @@
 var APP_URL = 'https://ngr2000.github.io/TaskBoard/';
 
 var SHEET_FLIGHTS = 'flights';
-var FLIGHTS_HEADER = ['key', 'label', 'date', 'updatedAt', 'json'];
+// archived は末尾に足すこと。読み出しが位置ベース（row[0]..row[5]）なので、
+// 途中に挿入すると json 列の位置がずれて全部壊れる。
+var FLIGHTS_HEADER = ['key', 'label', 'date', 'updatedAt', 'json', 'archived'];
 var IMAGE_PREFIX = 'image_';
 var SKETCH_PREFIX = 'sketch_';
 var CHUNK_SIZE = 40000; // 1セルの上限 5万字に対する安全マージン
@@ -96,6 +98,9 @@ function doPost(e) {
         break;
       case 'deleteFlight':
         out = { ok: deleteFlight(body.token, body.key), key: body.key };
+        break;
+      case 'archiveFlight':
+        out = setFlightArchived(body.token, body.key, !!body.archived);
         break;
       case 'state':
         out = apiFlights_();
@@ -186,10 +191,6 @@ function secureEquals_(given, expected) {
   return diff === 0;
 }
 
-function tokenMatches_(given) {
-  return secureEquals_(given, getApiToken_());
-}
-
 /** そのフライトの原本ページを全部消す（再アップ時に古いページが残らないように） */
 function clearImages_(key) {
   if (!key) throw new Error('フライトが指定されていません');
@@ -238,11 +239,24 @@ function getFlightsSheet_() {
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_FLIGHTS);
     sheet.getRange(1, 1, 1, FLIGHTS_HEADER.length).setValues([FLIGHTS_HEADER]);
+    return sheet;
+  }
+  // 列を増やした時、既存のシートは古いまま残る。ヘッダー行は最初の1回しか
+  // 書かれないので、ここで足りない分だけ直す（何度実行しても同じ結果になる）。
+  if (sheet.getMaxColumns() < FLIGHTS_HEADER.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), FLIGHTS_HEADER.length - sheet.getMaxColumns());
+  }
+  var head = sheet.getRange(1, 1, 1, FLIGHTS_HEADER.length).getValues()[0];
+  for (var i = 0; i < FLIGHTS_HEADER.length; i++) {
+    if (String(head[i] || '') !== FLIGHTS_HEADER[i]) {
+      sheet.getRange(1, 1, 1, FLIGHTS_HEADER.length).setValues([FLIGHTS_HEADER]);
+      break;
+    }
   }
   return sheet;
 }
 
-/** [{rowIndex, key, label, date, updatedAt, json}] を登録順（シート上の行順）で返す */
+/** [{rowIndex, key, label, date, updatedAt, json, archived}] を登録順（シート上の行順）で返す */
 function readFlightRows_() {
   var sheet = getFlightsSheet_();
   var lastRow = sheet.getLastRow();
@@ -258,7 +272,8 @@ function readFlightRows_() {
       label: String(row[1] || ''),
       date: String(row[2] || ''),
       updatedAt: String(row[3] || ''),
-      json: String(row[4] || '')
+      json: String(row[4] || ''),
+      archived: String(row[5] || '') // 空 = 通常、ISO日時 = アーカイブ済み
     });
   }
   return out;
@@ -301,6 +316,23 @@ function listSketchTaskNos_(ss) {
   return out;
 }
 
+/**
+ * 一覧に出すのに必要な情報を、保存済みJSONの1回のパースでまとめて取り出す。
+ * apiFlights_ は全フライト分これを呼ぶので、件数が増えるほどパース回数が効いてくる。
+ */
+function flightMeta_(jsonStr) {
+  try {
+    var parsed = JSON.parse(jsonStr);
+    var basic = parsed.basicInfo || {};
+    return {
+      taskCount: (parsed.tasks || []).length,
+      competitionName: String(basic.competitionName || basic.CompetitionName || '')
+    };
+  } catch (e) {
+    return { taskCount: 0, competitionName: '' };
+  }
+}
+
 function taskSummary_(jsonStr) {
   try {
     var parsed = JSON.parse(jsonStr);
@@ -326,12 +358,15 @@ function apiFlights_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var rows = readFlightRows_();
   var flights = rows.map(function (r) {
+    var meta = flightMeta_(r.json);
     return {
       key: r.key,
       label: r.label,
       date: r.date,
       updatedAt: r.updatedAt,
-      taskCount: taskSummary_(r.json).length,
+      taskCount: meta.taskCount,
+      competitionName: meta.competitionName, // アーカイブ画面の大会別グループ用
+      archived: r.archived,
       imagePages: countImagePages_(ss, r.key)
     };
   });
@@ -420,10 +455,12 @@ function saveFlight(auth, key, label, dataStr) {
   for (var i = 0; i < rows.length; i++) { if (rows[i].key === finalKey) { existing = rows[i]; break; } }
 
   if (existing) {
+    // 更新は全列を上書きするので、archived を読んで書き戻さないと
+    // 訂正のたびにアーカイブ状態が解除されてしまう。
     sheet.getRange(existing.rowIndex, 1, 1, FLIGHTS_HEADER.length)
-      .setValues([[finalKey, finalLabel, date, now, dataStr]]);
+      .setValues([[finalKey, finalLabel, date, now, dataStr, existing.archived || '']]);
   } else {
-    sheet.appendRow([finalKey, finalLabel, date, now, dataStr]);
+    sheet.appendRow([finalKey, finalLabel, date, now, dataStr, '']);
   }
   return { ok: true, key: finalKey, label: finalLabel, taskCount: parsed.tasks.length };
 }
@@ -457,6 +494,25 @@ function deleteFlight(auth, key) {
     }
   }
   return false;
+}
+
+/**
+ * フライトをアーカイブする／戻す。削除と違いデータは残り、
+ * クルー側の切替バーから外れてアーカイブ画面へ移るだけ。
+ */
+function setFlightArchived(auth, key, archived) {
+  requireWriteAuth_(auth);
+  var sheet = getFlightsSheet_();
+  var rows = readFlightRows_();
+  var col = FLIGHTS_HEADER.indexOf('archived') + 1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].key === key) {
+      var value = archived ? new Date().toISOString() : '';
+      sheet.getRange(rows[i].rowIndex, col).setValue(value);
+      return { ok: true, key: key, archived: value };
+    }
+  }
+  throw new Error('フライトが見つかりません: ' + key);
 }
 
 /** 原本タスクシートの1ページぶんを保存する。page を省略すると1ページ目。 */
@@ -518,6 +574,7 @@ function getAdminState(auth) {
       label: r.label,
       date: r.date,
       updatedAt: r.updatedAt,
+      archived: r.archived,
       imagePages: countImagePages_(ss, r.key),
       tasks: taskSummary_(r.json)
     };

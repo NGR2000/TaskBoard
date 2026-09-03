@@ -35,7 +35,8 @@
     screen: 'view',
     booted: false,
     apiUrl: '',
-    flights: [],       // [{key,label,date,updatedAt,taskCount,imagePages}]
+    flights: [],       // [{key,label,date,updatedAt,taskCount,competitionName,archived,imagePages}]
+                       // アーカイブ済みもここに含める。除くと圏外で開けなくなるため（restoreFromCache 参照）
     flightData: {},    // key -> { raw, data, updatedAt }
     activeFlight: '',
     images: [],
@@ -50,7 +51,8 @@
     rules: null,
     modal: null,
     localError: null,
-    lastSync: null
+    lastSync: null,
+    archiveGroup: 'year' // アーカイブ画面のまとめ方: year | month | event
   };
   var timers = [];
 
@@ -442,10 +444,53 @@
     return isFinite(updTime) && isFinite(seenTime) && updTime > seenTime;
   }
 
+  /** 通常フライト（切替バーに出るもの） */
+  function activeFlights() {
+    return state.flights.filter(function (f) { return !f.archived; });
+  }
+  /** アーカイブ済み（アーカイブ画面にだけ出るもの） */
+  function archivedFlights() {
+    return state.flights.filter(function (f) { return !!f.archived; });
+  }
+
+  /**
+   * タスクシートの日付から年と月を取り出す。
+   *
+   * date は自由記述で、実データだけでも4形式ある:
+   *   "01.05.2025 AM"（日.月.年）/ "2026.8.8"（年.月.日）
+   *   "2026年8月20日（木）AM" / "2025年5月5日（月）AM 0515"
+   * new Date() は使わない —— "01.05.2025" を1月5日と解釈してしまい、
+   * Krosno 系の日付が全て別の月に飛ぶ。
+   *
+   * 判別できない時は null を返し、呼び出し側で「日付不明」に寄せる（推測しない）。
+   */
+  function parseFlightDate(text) {
+    var nums = String(text || '').match(/\d+/g);
+    if (!nums || nums.length < 2) return null;
+    var year, month;
+    if (nums[0].length === 4) {            // 年が先頭
+      year = Number(nums[0]); month = Number(nums[1]);
+    } else if (nums.length >= 3 && nums[2].length === 4) { // 日.月.年
+      year = Number(nums[2]); month = Number(nums[1]);
+    } else {
+      return null;
+    }
+    if (!isFinite(year) || !isFinite(month)) return null;
+    if (year < 1900 || year > 2200 || month < 1 || month > 12) return null;
+    return { year: year, month: month };
+  }
+
+  /** 日付の新しい順に並べるための比較キー。不明は一番古い扱いにする */
+  function dateSortKey(f) {
+    var d = parseFlightDate(f.date);
+    return d ? d.year * 100 + d.month : -1;
+  }
+
   /** state.flights は新しい順（登録が新しいフライトが先頭）に揃えてある前提 */
   function pickActiveFlight() {
+    var list = activeFlights();
     if (state.activeFlight && state.flights.some(function (f) { return f.key === state.activeFlight; })) return;
-    state.activeFlight = state.flights.length ? state.flights[0].key : '';
+    state.activeFlight = list.length ? list[0].key : (state.flights.length ? state.flights[0].key : '');
   }
 
   function restoreFromCache() {
@@ -484,7 +529,9 @@
 
   /** 一覧取得後、表示中のフライトを優先しつつ残りも裏で取りに行く */
   function prefetchFlights() {
-    var keys = state.flights.map(function (f) { return f.key; });
+    // アーカイブ済みは先読みしない。増えるほど同期が重くなるため、開いた時に取りに行く。
+    // アーカイブ前に通常フライトとして先読み済みなので、実際にはほぼ端末に残っている。
+    var keys = activeFlights().map(function (f) { return f.key; });
     keys.sort(function (a) { return a === state.activeFlight ? -1 : 1; });
     var chain = Promise.resolve();
     keys.forEach(function (key) {
@@ -613,6 +660,7 @@
       case 'image':    html = viewImage(); break;
       case 'sketch':   html = viewSketch(); break;
       case 'rules':    html = viewRuleIndex(); break;
+      case 'archive':  html = viewArchive(); break;
       default:         html = viewMain();
     }
     app.innerHTML = html;
@@ -628,17 +676,37 @@
       '<div class="header-actions">' + (actions || '') + '</div></div>';
   }
 
-  /** フライト切替バー。1件しか無ければ出さない（雑音を減らす） */
+  /**
+   * フライト切替バー。通常フライトのチップ＋右端にアーカイブ入口。
+   * 通常が1件しか無く、アーカイブも無い時だけ丸ごと省く（雑音を減らす）。
+   */
   function flightBar() {
-    if (state.flights.length < 2) return '';
-    return '<div class="flight-bar">' + state.flights.map(function (f) {
+    var list = activeFlights();
+    var archived = archivedFlights();
+    if (list.length < 2 && !archived.length) return '';
+
+    // 開いているのがアーカイブ済みフライトの時は、それもチップとして出す。
+    // 出さないと「選択中がどこにも無い」状態になって迷子になる。
+    var shown = list.slice();
+    if (state.activeFlight && !shown.some(function (f) { return f.key === state.activeFlight; })) {
+      var current = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
+      if (current) shown.unshift(current);
+    }
+
+    var chips = shown.map(function (f) {
       var active = f.key === state.activeFlight;
       var isNew = !active && isNewFlight(f);
       var cached = !!state.flightData[f.key];
       return '<div class="flight-chip' + (active ? ' active' : '') + (cached ? '' : ' pending') +
         '" data-act="flight" data-key="' + esc(f.key) + '">' +
         (isNew ? '<span class="flight-dot"></span>' : '') + esc(f.label) + '</div>';
-    }).join('') + '</div>';
+    }).join('');
+
+    if (archived.length) {
+      chips += '<div class="flight-chip archive" data-act="screen" data-screen="archive">📦 アーカイブ ' +
+        archived.length + '</div>';
+    }
+    return '<div class="flight-bar">' + chips + '</div>';
   }
 
   // ---------- メイン ----------
@@ -914,6 +982,74 @@
       '</div></div>';
   }
 
+  // ---------- アーカイブ ----------
+  var ARCHIVE_TABS = [
+    { id: 'year', label: '年' },
+    { id: 'month', label: '月' },
+    { id: 'event', label: '大会' }
+  ];
+
+  /** グループの見出しと、並べ替え用のキーを決める */
+  function archiveGroupOf(f, mode) {
+    var d = parseFlightDate(f.date);
+    if (mode === 'event') {
+      var name = f.competitionName || '大会名なし';
+      return { title: name, sort: d ? d.year * 100 + d.month : -1, tie: name };
+    }
+    if (!d) return { title: '日付不明', sort: -1, tie: '' };
+    if (mode === 'month') return { title: d.year + '年' + d.month + '月', sort: d.year * 100 + d.month, tie: '' };
+    return { title: d.year + '年', sort: d.year * 100, tie: '' };
+  }
+
+  function viewArchive() {
+    var list = archivedFlights();
+    var mode = state.archiveGroup;
+    var html = header('アーカイブ', list.length + '件', '', 'view');
+
+    html += '<div class="archive-tabs">' + ARCHIVE_TABS.map(function (t) {
+      return '<button class="archive-tab' + (t.id === mode ? ' active' : '') +
+        '" data-act="archive-group" data-group="' + t.id + '">' + t.label + '</button>';
+    }).join('') + '</div>';
+
+    html += '<div class="wrap">';
+    if (!list.length) {
+      html += '<div class="center-note">アーカイブされたフライトはありません。</div>';
+      return html + '<div class="spacer"></div></div>';
+    }
+
+    // 見出しごとにまとめる。同じ見出しの中では日付の新しい順。
+    var groups = [];
+    var byTitle = {};
+    list.forEach(function (f) {
+      var g = archiveGroupOf(f, mode);
+      if (!byTitle[g.title]) {
+        byTitle[g.title] = { title: g.title, sort: g.sort, tie: g.tie, items: [] };
+        groups.push(byTitle[g.title]);
+      }
+      // 大会グループは「その大会の最新フライト」で並べたいので、最大値を採る
+      if (g.sort > byTitle[g.title].sort) byTitle[g.title].sort = g.sort;
+      byTitle[g.title].items.push(f);
+    });
+    groups.sort(function (a, b) {
+      if (b.sort !== a.sort) return b.sort - a.sort;
+      return String(a.tie).localeCompare(String(b.tie));
+    });
+
+    groups.forEach(function (g) {
+      g.items.sort(function (a, b) { return dateSortKey(b) - dateSortKey(a); });
+      html += '<div class="archive-group-title">' + esc(g.title) + '</div>';
+      html += g.items.map(function (f) {
+        var sub = [f.date || '日付不明', (f.taskCount || 0) + 'タスク'].join('　');
+        return '<div class="card"><div class="card-header" data-act="flight" data-key="' + esc(f.key) + '">' +
+          '<div><div class="archive-label">' + esc(f.label) + '</div>' +
+          '<div class="archive-sub">' + esc(sub) + '</div></div>' +
+          '<span class="chevron">›</span></div></div>';
+      }).join('');
+    });
+
+    return html + '<div class="spacer"></div></div>';
+  }
+
   function viewRuleIndex() {
     var list = (state.rules && state.rules.tasks) || [];
     var html = header('AXMER 2026 Chapter 15', 'タスク定義 全' + list.length + '種目', '', 'view');
@@ -1031,6 +1167,7 @@
       case 'image': loadImage(); break;
       case 'sketch': loadSketch(node.getAttribute('data-taskno')); break;
       case 'rules': state.screen = 'rules'; render(); break;
+      case 'archive-group': state.archiveGroup = node.getAttribute('data-group'); render(); break;
       case 'rule': state.modal = node.getAttribute('data-taskid'); renderModal(); break;
       case 'saveapi': {
         var v = (el('apiInput').value || '').trim();

@@ -12,5 +12,7 @@ docs/
 .claude/
 tools/**
 tools/
+tests/**
+tests/
 memory/**
 memory/
