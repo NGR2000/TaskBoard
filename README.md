@@ -44,6 +44,7 @@
 | `コード.js` | GAS。閲覧用JSON API（`?action=...`・認証なし）、管理画面の配信、書き込みAPI（`doPost`・トークン必須） |
 | `index.html` | GAS の入力・管理画面（フライト一覧・登録・編集・削除） |
 | `tools/publish.py` | 変換済みJSONと原本を書き込みAPIへ送る（ワークフローB） |
+| `tools/make_icons.py` | `tools/icon-source.png` から PWA のアイコン一式を作り直す |
 | `tests/` | GASバックエンドをNode上で動かして確かめるテスト（デプロイ不要） |
 | `.claude/skills/` | Claude 用スキル（`taskboard-convert` = 変換、`taskboard-publish` = 反映まで一気に） |
 | `docs/` | GitHub Pages に公開する閲覧用PWA |
@@ -51,6 +52,7 @@
 | `docs/data/dictionary.json` | **用語辞書**（英語表記 → 日本語） |
 | `docs/data/axmer2026-ch15.json` | AXMER 2026 Chapter 15 の全21タスク定義（和訳付き） |
 | `docs/sw.js` | Service Worker（オフライン） |
+| `docs/*.png` | ホーム画面／タブ用アイコン（`make_icons.py` の生成物。手で編集しない） |
 | `JSON/sample_worlds2026_v2.json` | 新スキーマのサンプル |
 | `JSON/kro2025_flight{1,2,3,4}.json` | 実データ（KRO2025 Pre Worlds）のフィクスチャ |
 
@@ -332,6 +334,8 @@ python3 tools/publish.py --json flight.json --original tds.pdf
   `TASKBOARD_ADMIN_PASS` に合言葉を設定する（下記）。
 - 原本のPDF変換はCDNから読み込む変換ライブラリ（pdf.js）に依存するため、管理画面側は
   通信できる状態で行う必要がある（クルー側アプリは変換済みの画像しか受け取らないので影響しない）。
+- **アイコンを変えた後は、クルーの端末で一度ホーム画面から削除して追加し直す必要がある。**
+  iOSは追加した時点のアイコンを保持し、あとから差し替えても更新されない。
 
 ## 管理画面を合言葉で守る
 
