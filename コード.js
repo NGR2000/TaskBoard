@@ -52,7 +52,7 @@ function doGet(e) {
         out = { ok: true, image: getImageData_(p.key, p.page) };
         break;
       case 'sketch':
-        out = { ok: true, taskNo: String(p.taskNo || ''), image: getSketchData(p.taskNo) };
+        out = { ok: true, flightKey: String(p.flightKey || ''), taskNo: String(p.taskNo || ''), image: getSketchData(p.flightKey, p.taskNo) };
         break;
       default:
         out = { ok: false, error: 'unknown action: ' + action };
@@ -304,14 +304,33 @@ function countImagePages_(ss, key) {
   return n;
 }
 
-/** シート名を1回だけ走査する（タスク数ぶん getSheetByName を回さない） */
-function listSketchTaskNos_(ss) {
+/**
+ * シート名を1回だけ走査する（タスク数ぶん getSheetByName を回さない）。
+ *
+ * スケッチはタスク番号だけでなくフライトキーも紐づけて保存している
+ * （sketch_<flightKey>_<taskNo>）。大会をまたぐと同じ番号のタスクが
+ * 何度も出てくるため、番号だけをキーにすると別フライトの絵が出てしまう。
+ * シート名からフライトキーを復元する必要があるが、キー自体に区切り文字と
+ * 同じ文字（アンダースコア）が含まれ得るので、既知のフライトキー一覧と
+ * 前方一致させて分解する（長いキーから先に試し、誤って短いキーの
+ * 部分一致に当たらないようにする）。
+ */
+function listSketchKeys_(ss, rows) {
+  var keys = rows.map(function (r) { return r.key; })
+    .sort(function (a, b) { return b.length - a.length; });
   var out = [];
   ss.getSheets().forEach(function (sheet) {
     var name = sheet.getName();
     if (name.indexOf(SKETCH_PREFIX) !== 0) return;
     if (!hasContent_(sheet)) return;
-    out.push(name.substring(SKETCH_PREFIX.length));
+    var rest = name.substring(SKETCH_PREFIX.length); // "<flightKey>_<taskNo>"
+    for (var i = 0; i < keys.length; i++) {
+      if (rest.indexOf(keys[i] + '_') === 0) {
+        out.push({ flightKey: keys[i], taskNo: rest.substring(keys[i].length + 1) });
+        return;
+      }
+    }
+    // どのフライトにも一致しない（削除済みフライトの残骸など）。一覧には出さない。
   });
   return out;
 }
@@ -370,7 +389,7 @@ function apiFlights_() {
       imagePages: countImagePages_(ss, r.key)
     };
   });
-  return { ok: true, version: 3, flights: flights, sketchTaskNos: listSketchTaskNos_(ss) };
+  return { ok: true, version: 3, flights: flights, sketches: listSketchKeys_(ss, rows) };
 }
 
 /** 指定フライトの中身（タスクJSON本体）を返す */
@@ -423,9 +442,15 @@ function getImageData_(key, page) {
   } catch (e) { return null; }
 }
 
-function getSketchData(taskNo) {
+/** スケッチはタスク番号だけでなくフライトキーでも紐づく（sketch_<flightKey>_<taskNo>）。
+ *  大会をまたぐと番号が再利用されるため、番号だけをキーにすると別フライトの絵が出てしまう。 */
+function sketchSheetName_(flightKey, taskNo) {
+  return SKETCH_PREFIX + String(flightKey || '') + '_' + String(taskNo || '');
+}
+
+function getSketchData(flightKey, taskNo) {
   try {
-    var name = SKETCH_PREFIX + String(taskNo || '');
+    var name = sketchSheetName_(flightKey, taskNo);
     return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name));
   } catch (e) { return null; }
 }
@@ -537,18 +562,19 @@ function deleteLastImagePage(auth, key) {
   return true;
 }
 
-function saveSketchData(auth, taskNo, imageData) {
+function saveSketchData(auth, flightKey, taskNo, imageData) {
   requireWriteAuth_(auth);
+  if (!flightKey) throw new Error('フライトが指定されていません');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var name = SKETCH_PREFIX + String(taskNo || '');
+  var name = sketchSheetName_(flightKey, taskNo);
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
   return true;
 }
 
-function deleteSketchData(auth, taskNo) {
+function deleteSketchData(auth, flightKey, taskNo) {
   requireWriteAuth_(auth);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SKETCH_PREFIX + String(taskNo || ''));
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sketchSheetName_(flightKey, taskNo));
   if (sheet) sheet.clearContents();
   return true;
 }
@@ -582,7 +608,7 @@ function getAdminState(auth) {
   return {
     ok: true,
     flights: flights,
-    sketchTaskNos: listSketchTaskNos_(ss),
+    sketches: listSketchKeys_(ss, rows),
     execUrl: getExecUrl_(),
     appUrl: APP_URL,
     // 合言葉が未設定なら画面に警告を出させる（URL を知っている人は誰でも操作できる状態）

@@ -45,6 +45,8 @@ label.field { display:block; font-size:12px; font-weight:bold; color:#555; margi
 .flight-sub { font-size:12px; color:#777; margin-top:2px; }
 .flight-actions { display:flex; gap:6px; flex-shrink:0; }
 .flight-empty { text-align:center; padding:30px 10px; color:#999; font-size:13px; }
+.sketch-group { margin-bottom:14px; }
+.sketch-group-title { font-size:13px; font-weight:bold; color:#444; padding-bottom:4px; margin-bottom:2px; border-bottom:1px solid #ddd; }
 select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; background:#fff; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -117,7 +119,7 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
   <div id="imageMsg"></div>
 
   <h2>5. タスク別スケッチ</h2>
-  <div class="hint" style="margin-top:0">タスク番号は大会全体で一意なので、フライトをまたいで一覧表示します。</div>
+  <div class="hint" style="margin-top:0">タスク番号はフライトごとに振り直されるため、フライトごとに分けて一覧表示します。</div>
   <div id="sketchList"><div class="status">確認中…</div></div>
   <div id="sketchMsg"></div>
 
@@ -281,28 +283,25 @@ function renderState() {
     }).join('');
   }
 
-  // スケッチ一覧（全フライト分のタスクをまとめて重複排除）
-  var seen = {};
-  var allTasks = [];
-  s.flights.forEach(function (f) {
-    (f.tasks || []).forEach(function (t) {
-      if (seen[t.taskNo]) return;
-      seen[t.taskNo] = true;
-      allTasks.push(t);
-    });
-  });
+  // スケッチ一覧（フライトごとにグループ化。タスク番号はフライトをまたいで
+  // 再利用されるので、番号だけでまとめると別フライトの絵と混同する）
   var skList = document.getElementById('sketchList');
-  if (!allTasks.length) {
+  var flightsWithTasks = s.flights.filter(function (f) { return (f.tasks || []).length; });
+  if (!flightsWithTasks.length) {
     skList.innerHTML = '<div class="status">先にフライトを登録してください。</div>';
   } else {
-    skList.innerHTML = allTasks.map(function (t) {
-      var has = s.sketchTaskNos.indexOf(t.taskNo) >= 0;
-      var btns = has
-        ? '<button class="btn-danger-outline" data-act="delete-sketch" data-taskno="' + esc(t.taskNo) + '">削除</button>'
-        : '<input type="file" id="sk_' + esc(t.taskNo) + '" accept="image/*" style="display:none" data-taskno="' + esc(t.taskNo) + '" data-act="upload-sketch">' +
-          '<button class="btn-small" data-act="pick-sketch" data-target="sk_' + esc(t.taskNo) + '">追加</button>';
-      return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + esc(t.taskNo) +
-        ' <b>' + esc(t.taskId) + '</b> <span class="status">' + esc(t.name) + '</span></span><span>' + btns + '</span></div>';
+    skList.innerHTML = flightsWithTasks.map(function (f) {
+      var rows = f.tasks.map(function (t) {
+        var has = s.sketches.some(function (x) { return x.flightKey === f.key && x.taskNo === t.taskNo; });
+        var id = 'sk_' + f.key + '_' + t.taskNo;
+        var btns = has
+          ? '<button class="btn-danger-outline" data-act="delete-sketch" data-flightkey="' + esc(f.key) + '" data-taskno="' + esc(t.taskNo) + '">削除</button>'
+          : '<input type="file" id="' + esc(id) + '" accept="image/*" style="display:none" data-flightkey="' + esc(f.key) + '" data-taskno="' + esc(t.taskNo) + '" data-act="upload-sketch">' +
+            '<button class="btn-small" data-act="pick-sketch" data-target="' + esc(id) + '">追加</button>';
+        return '<div class="row"><span>' + (has ? '✅' : '📂') + ' Task ' + esc(t.taskNo) +
+          ' <b>' + esc(t.taskId) + '</b> <span class="status">' + esc(t.name) + '</span></span><span>' + btns + '</span></div>';
+      }).join('');
+      return '<div class="sketch-group"><div class="sketch-group-title">' + esc(f.label) + '</div>' + rows + '</div>';
     }).join('');
   }
 }
@@ -472,7 +471,7 @@ function deleteLastImage() {
     .deleteLastImagePage(adminPass(), editingKey);
 }
 
-function upSketch(input, taskNo) {
+function upSketch(input, flightKey, taskNo) {
   var file = input.files[0];
   if (!file) return;
   msg('sketchMsg', 'Task ' + taskNo + ' を保存中…', 'info');
@@ -480,16 +479,16 @@ function upSketch(input, taskNo) {
     google.script.run
       .withSuccessHandler(function () { msg('sketchMsg', '✅ Task ' + taskNo + ' のスケッチを保存しました', 'ok'); refresh(); })
       .withFailureHandler(function (e) { msg('sketchMsg', '保存に失敗: ' + e.message, 'err'); })
-      .saveSketchData(adminPass(), taskNo, data);
+      .saveSketchData(adminPass(), flightKey, taskNo, data);
   });
 }
 
-function delSketch(taskNo) {
+function delSketch(flightKey, taskNo) {
   if (!confirm('Task ' + taskNo + ' のスケッチを削除しますか？')) return;
   google.script.run
     .withSuccessHandler(function () { msg('sketchMsg', 'Task ' + taskNo + ' のスケッチを削除しました', 'ok'); refresh(); })
     .withFailureHandler(function (e) { msg('sketchMsg', '削除に失敗: ' + e.message, 'err'); })
-    .deleteSketchData(adminPass(), taskNo);
+    .deleteSketchData(adminPass(), flightKey, taskNo);
 }
 
 function resetAll() {
@@ -510,7 +509,7 @@ document.addEventListener('click', function (ev) {
     case 'delete-flight': deleteFlight(node.getAttribute('data-key'), node.getAttribute('data-label')); break;
     case 'archive-flight': setArchived(node.getAttribute('data-key'), node.getAttribute('data-label'), true); break;
     case 'unarchive-flight': setArchived(node.getAttribute('data-key'), node.getAttribute('data-label'), false); break;
-    case 'delete-sketch': delSketch(node.getAttribute('data-taskno')); break;
+    case 'delete-sketch': delSketch(node.getAttribute('data-flightkey'), node.getAttribute('data-taskno')); break;
     case 'pick-sketch': {
       var target = document.getElementById(node.getAttribute('data-target'));
       if (target) target.click();
@@ -522,7 +521,7 @@ document.addEventListener('click', function (ev) {
 document.addEventListener('change', function (ev) {
   var node = ev.target;
   if (node.getAttribute && node.getAttribute('data-act') === 'upload-sketch') {
-    upSketch(node, node.getAttribute('data-taskno'));
+    upSketch(node, node.getAttribute('data-flightkey'), node.getAttribute('data-taskno'));
   }
 });
 

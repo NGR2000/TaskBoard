@@ -18,12 +18,12 @@
     api: 'tb.api',
     flightsIndex: 'tb.flights.index',
     activeFlight: 'tb.activeFlight',
-    sketchIdx: 'tb.sketchTaskNos',
+    sketchIdx: 'tb.sketches',
     lastSync: 'tb.lastSync',
     flightPrefix: 'tb.flight.',      // + key  -> { data, updatedAt }
     lastViewedPrefix: 'tb.lastViewed.', // + key -> ISO timestamp
     imagePrefix: 'tb.image.',        // + key
-    sketchPrefix: 'tb.sketch.'       // + taskNo
+    sketchPrefix: 'tb.sketch.'       // + flightKey + '.' + taskNo（大会をまたぐとタスク番号が再利用されるため）
   };
   var CFG = window.TASKBOARD_CONFIG || {};
   var LOCAL_KEY = '__local__';
@@ -40,8 +40,8 @@
     flightData: {},    // key -> { raw, data, updatedAt }
     activeFlight: '',
     images: [],
-    sketchTaskNos: [],
-    sketchCache: {},
+    sketches: [],       // [{flightKey,taskNo}] スケッチが存在する組み合わせ
+    sketchCache: {},    // key: flightKey + '.' + taskNo
     currentSketch: null,
     open: {},
     syncing: false,
@@ -497,8 +497,8 @@
     try { state.flights = JSON.parse(safeGet(LS.flightsIndex) || '[]'); } catch (e) { state.flights = []; }
     state.activeFlight = safeGet(LS.activeFlight) || '';
     state.lastSync = safeGet(LS.lastSync) || null;
-    try { state.sketchTaskNos = JSON.parse(safeGet(LS.sketchIdx) || '[]'); }
-    catch (e) { state.sketchTaskNos = []; }
+    try { state.sketches = JSON.parse(safeGet(LS.sketchIdx) || '[]'); }
+    catch (e) { state.sketches = []; }
 
     state.flights.forEach(function (f) {
       var cached = loadFlightCache(f.key);
@@ -555,9 +555,9 @@
         // 「タスクシートの日付が新しいものが先頭」にしたいので反転する。
         // 訂正登録は既存行を上書きするだけで並びは動かないため、登録順＝日付順という前提でよい。
         state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; }).reverse();
-        state.sketchTaskNos = res.sketchTaskNos || [];
+        state.sketches = res.sketches || [];
         safeSet(LS.flightsIndex, JSON.stringify(state.flights));
-        safeSet(LS.sketchIdx, JSON.stringify(state.sketchTaskNos));
+        safeSet(LS.sketchIdx, JSON.stringify(state.sketches));
         state.lastSync = new Date().toISOString();
         safeSet(LS.lastSync, state.lastSync);
         pickActiveFlight();
@@ -627,18 +627,23 @@
     for (var p = 1; p <= total; p++) loadPage(p);
   }
 
+  /** スケッチはタスク番号だけでなくフライトにも紐づく（大会をまたぐと番号が再利用されるため） */
+  function sketchCacheKey(flightKey, taskNo) { return flightKey + '.' + taskNo; }
+
   function loadSketch(taskNo) {
-    state.currentSketch = taskNo;
-    var cached = state.sketchCache[taskNo] || safeGet(LS.sketchPrefix + taskNo);
-    if (cached) { state.sketchCache[taskNo] = cached; state.screen = 'sketch'; render(); return; }
+    var flightKey = state.activeFlight;
+    state.currentSketch = { flightKey: flightKey, taskNo: taskNo };
+    var ck = sketchCacheKey(flightKey, taskNo);
+    var cached = state.sketchCache[ck] || safeGet(LS.sketchPrefix + ck);
+    if (cached) { state.sketchCache[ck] = cached; state.screen = 'sketch'; render(); return; }
     state.screen = 'sketch';
     state.syncing = true;
     render();
-    apiGet('sketch', { taskNo: taskNo })
+    apiGet('sketch', { flightKey: flightKey, taskNo: taskNo })
       .then(function (res) {
         var img = (res && res.image) || null;
-        state.sketchCache[taskNo] = img;
-        if (img) safeSet(LS.sketchPrefix + taskNo, img);
+        state.sketchCache[ck] = img;
+        if (img) safeSet(LS.sketchPrefix + ck, img);
       })
       .catch(function (e) { state.syncError = e.message || String(e); })
       .then(function () { state.syncing = false; render(); });
@@ -897,7 +902,9 @@
 
   function renderAttach(task) {
     var no = String(task.taskNo || '');
-    var has = state.sketchTaskNos.indexOf(no) >= 0 || !!state.sketchCache[no];
+    var flightKey = state.activeFlight;
+    var has = state.sketches.some(function (x) { return x.flightKey === flightKey && x.taskNo === no; }) ||
+      !!state.sketchCache[sketchCacheKey(flightKey, no)];
     if (!has) return '<div class="attach empty">📎 スケッチなし</div>';
     return '<div class="attach"><span>📎 スケッチ / Sketch</span>' +
       '<button class="btn-small" data-act="sketch" data-taskno="' + esc(no) + '">見る</button></div>';
@@ -1084,10 +1091,11 @@
   }
 
   function viewSketch() {
-    var no = state.currentSketch;
+    var cur = state.currentSketch || {};
+    var no = cur.taskNo;
     var html = header('Task ' + no + ' スケッチ', 'Sketch', '', 'view');
     if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
-    var img = state.sketchCache[no];
+    var img = state.sketchCache[sketchCacheKey(cur.flightKey, no)];
     if (!img) return html + '<div class="center-note">画像がありません' +
       (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
     return html + '<div class="viewer"><img src="' + esc(img) + '" alt="Task ' + esc(no) + ' スケッチ"></div>';
@@ -1209,7 +1217,7 @@
           if (k.indexOf('tb.') === 0 && k !== LS.api) safeRemove(k);
         });
         state.flights = []; state.flightData = {}; state.activeFlight = '';
-        state.images = []; state.sketchCache = {}; state.sketchTaskNos = [];
+        state.images = []; state.sketchCache = {}; state.sketches = [];
         state.lastSync = null;
         state.screen = 'view';
         render();

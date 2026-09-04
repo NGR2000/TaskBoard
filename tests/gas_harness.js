@@ -47,6 +47,10 @@ function makeSheet(name) {
           ensure(row, col);
           while (cells.length < row) cells.push([]);
           cells[row - 1][col - 1] = v;
+        },
+        getValue: () => {
+          const src = cells[row - 1] || [];
+          return src[col - 1] === undefined ? '' : src[col - 1];
         }
       };
     },
