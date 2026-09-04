@@ -72,5 +72,24 @@ function post5(body) { return JSON.parse(c5.doPost({ postData: { contents: JSON.
 check('空トークンを拒否', post5({token:'', action:'state'}).error === 'unauthorized', JSON.stringify(post5({token:'', action:'state'})));
 check('token 省略も拒否', post5({action:'state'}).error === 'unauthorized');
 
+console.log('\n[8] ★退行しやすい箇所: スケッチはフライトをまたいでタスク番号が衝突しない');
+let c6 = makeContext({ props: { TASKBOARD_API_TOKEN: TOKEN } });
+c6.saveFlight(TOKEN, 'flight-a', 'フライトA', flightJson); // Task 1, 2 を含む
+c6.saveFlight(TOKEN, 'flight-b', 'フライトB', flightJson); // 同じ Task 1, 2 を含む別フライト
+c6.saveSketchData(TOKEN, 'flight-a', '1', 'DATA_A1');
+c6.saveSketchData(TOKEN, 'flight-b', '1', 'DATA_B1');
+check('flight-a の Task1 は自分のデータを読める', c6.getSketchData('flight-a', '1') === 'DATA_A1');
+check('flight-b の Task1 は自分のデータを読める（flight-a と混ざらない）', c6.getSketchData('flight-b', '1') === 'DATA_B1');
+check('flight-a の Task2 にはスケッチが無い', c6.getSketchData('flight-a', '2') === null);
+let sk = c6.listSketchKeys_(c6.__ss, c6.readFlightRows_());
+check('listSketchKeys_ が2件とも別フライトとして返す',
+  sk.length === 2 && sk.some(function(x){return x.flightKey==='flight-a'&&x.taskNo==='1';}) &&
+  sk.some(function(x){return x.flightKey==='flight-b'&&x.taskNo==='1';}), JSON.stringify(sk));
+check('apiFlights_ が sketches をフライト付きで返す',
+  c6.apiFlights_().sketches.length === 2, JSON.stringify(c6.apiFlights_().sketches));
+c6.deleteSketchData(TOKEN, 'flight-a', '1');
+check('flight-a だけ削除しても flight-b は残る',
+  c6.getSketchData('flight-a', '1') === null && c6.getSketchData('flight-b', '1') === 'DATA_B1');
+
 console.log('\n失敗: ' + fail);
 process.exit(fail ? 1 : 0);
