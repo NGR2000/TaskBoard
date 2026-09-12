@@ -1,70 +1,100 @@
 ---
 name: taskboard-publish
-description: Takes a task sheet file (PDF or photo) all the way from reading it to live on the crew app in one go — convert, preview, confirm, register, and upload the original pages. Use this whenever the user uploads a task sheet and wants it actually registered/reflected/live rather than just converted — phrases like "反映して", "登録して", "アップして", "クルーに出して", "一気にやって", or a task sheet plus any request that implies the crew should see it. If the user only wants the JSON text to paste in themselves, use taskboard-convert instead; this skill is the automated end of that same pipeline and writes to live competition data.
+description: Takes a task sheet (PDF, photo, or a URL to an event page listing task-sheet PDFs) all the way to live on the TaskBoard crew app — fetch, convert, preview, confirm, register, upload the original pages, verify, and hand off any per-task sketch/diagram. Use this whenever the user wants a task sheet actually registered, reflected, or visible to the crew: "反映して", "登録して", "アップして", "登録とアップして", "クルーに出して", "一気にやって", a task sheet plus "変換してアップ", or "タスクシートが公表された" with a link. Also use it for follow-ups on registered flights — archive a test flight, check what's live, attach a diagram to a task — since those go through the same write API. If the user only wants the JSON text, use taskboard-convert instead.
 ---
 
 # TaskBoard one-shot publish
 
-Take a task sheet from file to live on the crew app without the user touching the admin panel. This writes to real competition data that a crew depends on, so the confirmation step below is the part that matters most — everything else is mechanical.
+Take a task sheet from file (or URL) to live on the crew app without the user touching the admin panel. This writes to competition data a crew relies on, so the preview and confirmation steps carry the weight; the rest is mechanical and mostly scripted.
+
+Scripts bundled here (paths relative to this skill directory):
+
+| Script | Does |
+|---|---|
+| `scripts/taskboard_state.py list` | Live flights (key, label, date, task count, pages, archived) and which flight/task pairs have sketches |
+| `scripts/taskboard_state.py archive <key>` / `unarchive <key>` | Archive a flight via the write API (data stays; crew sees it under 📦) |
+| `scripts/preview.js <flight.json> <prefix>` | Loads the JSON into the real crew app and screenshots the basic-info card and every task card |
+
+`tools/publish.py` (repo root) does the registering and original-page upload.
 
 ## What has to be in place
 
-The publish step needs a write token. Check `TASKBOARD_TOKEN` is set before doing any work — if it's missing, stop and tell the user to set it in their Claude Code environment settings (the token is the `TASKBOARD_API_TOKEN` value under Apps Script → Project Settings → Script Properties). Don't ask them to paste it into the chat; it ends up in the transcript.
+- `TASKBOARD_TOKEN` in the environment. If missing, stop and ask the user to set it in their Claude Code environment settings (it is the `TASKBOARD_API_TOKEN` script property). Never ask for it in chat.
+- A GAS deployment that includes `doPost`. Non-JSON responses or "unknown action" mean the deployed version is older than the repo. `taskboard_state.py list` prints a warning if the response still carries the pre-sketch-fix `sketchTaskNos` field — that also means the deployment is stale.
 
-The backend also needs a deployment that includes `doPost` in `コード.js`. If publishing fails with a non-JSON response or "unknown action", their deployed version predates the write API — they need `clasp push` and a new deployment version.
+Deploying GAS is the user's job (`git pull` → `clasp push` → "デプロイを管理 → 新バージョン"). The single most common failure is running `clasp push` from a checkout that was never pulled; when a redeploy "didn't work", check that first.
 
-## Step 1 — Convert
+## Step 1 — Fetch and convert
 
-Follow the `taskboard-convert` skill for this. It covers reading the sheet faithfully (zooming into unclear text, never inventing values) and the JSON shape, including the `valueJa`/`notesJa` bilingual rules. Don't reimplement that here; the conversion quality bar is the same whether or not the result gets published.
+Follow `taskboard-convert` for reading and shaping (it covers URLs, PDFs, photos, date rules, `valueJa`). Write each flight's JSON to the scratchpad. Use absolute paths everywhere — the shell's cwd resets between commands here.
 
-Write the JSON to a file (the scratchpad directory is fine — it doesn't need to live in the repo unless the user wants a fixture).
+## Step 2 — Preview through the real app
 
-## Step 2 — Preview, and make it a real preview
-
-Show the user what the crew will actually see, not the raw JSON. Raw JSON hides exactly the mistakes that matter — a misread coordinate looks fine in JSON but obviously wrong on the card.
-
-Render it through the real crew app and screenshot it:
+Raw JSON hides exactly the mistakes that matter. Render it:
 
 ```bash
-python3 -m http.server 8765 --directory docs &
+cd <repo> && (setsid nohup python3 -m http.server 8765 --directory docs >/dev/null 2>&1 < /dev/null &)
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8765/      # expect 200
+cd <dir with node_modules/playwright> && node <skill>/scripts/preview.js /abs/flight.json /abs/out/prefix
 ```
 
-then drive it with Playwright: open `http://127.0.0.1:8765/`, go to 設定 → 「JSONを直接読み込む」(`[data-screen="settings"]`, then `[data-screen="local"]`), fill `#jsonInput` with the JSON, click `[data-act="loadlocal"]`, and screenshot the result. This is the same local-load path the crew app already has for emergencies, so it renders identically to the real thing. Send the screenshot with `SendUserFile`.
+Start the server in its own command with `setsid nohup`; a `pkill` whose pattern matches the calling shell kills the command itself (exit 144), and a server started in a plain `&` tends to die with the call. If `playwright` is missing, `npm i playwright` in the scratchpad (Chromium is preinstalled; don't run `playwright install`).
 
-Keep the screenshot small enough to actually send — a full-page capture at `deviceScaleFactor: 2` runs over a megabyte and the upload is rejected. A normal viewport-sized shot at scale 1 (roughly 430×1000) comes in under 100 KB. For a long sheet, send a few scrolled shots rather than one giant one.
+Send the `-info.png` and the task cards with `SendUserFile` — viewport-sized shots stay under 100 KB; full-page 2x captures get rejected. Alongside them, list what you were unsure about (from the convert step) — this is the user's last chance to catch a misread.
 
-Alongside the screenshot, call out anything you were unsure about while reading the sheet — illegible text, placeholders transcribed literally, handwriting, ambiguous target-vs-field calls. This is the user's last chance to catch a misread before the crew sees it.
+Things that look wrong in the preview but are correct: a GMD banner on any "gravity" marker drop; `--:--` under a relative scoring period like `TO+2,5h`; a green dot next to "green flag + 30min"; "辞書外" badges on labels the dictionary doesn't know.
 
-## Step 3 — Get an explicit go-ahead
+## Step 3 — Get the go-ahead, and pick the key
 
-Ask before publishing, every time. Registering overwrites what the crew sees, and a wrong flight during a competition is worse than a slow one. A file upload with "変換して" is not permission to publish; a plain "お願い" on a task sheet isn't either — if the user's intent to publish isn't clear, convert and preview, then ask.
+Ask before publishing unless the user already said so in the request ("登録して", "変換してアップ", "登録とアップして" are go-aheads — don't ask again, but still surface the uncertainties). A bare "変換して" or "お願い" is not permission.
 
-Also confirm which flight this is when it could overwrite an existing one. Publishing without `--key` creates a new flight; passing an existing `key` overwrites that flight in place. If the sheet looks like a correction to something already registered, check the current list first (`?action=flights` on the API, or `--dry-run`) and ask which they mean.
+Before sending anything:
+
+```bash
+python3 <skill>/scripts/taskboard_state.py list
+```
+
+Always pass explicit `--key` and `--label`. Without them the key is derived from the JSON's Flight/Tasks fields (`flight-1-1-2-3-4-5`) and silently overwrites any earlier flight that derived the same key. Key style in use: `saku2026-flight1`, `slovak2026-flight1`, `worlds2026-training-t3`, or the same key as an existing flight when the sheet is a correction of it. Labels are what the crew sees on the chip: `Training Flight T3`, `2022年スロベニア初日PM`, `Saku 2026 Flight1 (#1-#5)`.
+
+If the sheet might be a correction to something already registered, say which existing key you would overwrite and confirm.
 
 ## Step 4 — Publish
 
 ```bash
-python3 tools/publish.py --json <flight.json> --original <sheet.pdf> [--key <existing-key>] [--label <name>]
+python3 tools/publish.py --json /abs/flight.json --original /abs/sheet.pdf --key <key> --label "<label>"
 ```
 
-The tool reads the API URL from `docs/config.js` and the token from `TASKBOARD_TOKEN`, converts PDF pages (or images) to the same JPEG page format the admin panel produces, registers the flight, then uploads the pages in order. By default it replaces existing original pages so a re-run doesn't leave stale ones behind; `--keep-images` appends instead.
+- `--original` is the printed sheet (PDF pages or the photo of the sheet) — not hand-drawn sketches; those go through Step 6.
+- Several flights → one command per flight, in a loop, then one `taskboard_state.py list` at the end.
+- Original only, for a flight already registered: drop `--json`, keep `--key`. Re-saving with `--json` and no `--label` would regenerate the label.
+- `--dry-run` reports what would happen without sending; use it when anything about the target is uncertain.
 
-When the flight is already registered and only the original is missing — the sheet PDF often arrives after the data — drop `--json` and pass `--key` instead:
+Then verify with `taskboard_state.py list` and report what actually landed (label, task count, page count). If the page count doesn't match what you uploaded, say so instead of declaring success.
 
-```bash
-python3 tools/publish.py --key <existing-key> --original <sheet.pdf>
-```
+## Step 5 — Test data and archiving
 
-That uploads pages without touching the registered tasks or the label. Prefer it over re-publishing the whole flight, since re-saving with a blank `--label` would regenerate the label from the JSON and clobber a name the user chose by hand.
+A sheet registered only to test something should not stay in the crew's flight bar. Ask "アーカイブ／削除／このまま？" and, for archive, run `taskboard_state.py archive <key>`. Archiving keeps data and sketches; restoring is `unarchive`. Deleting is only in the admin panel and is irreversible.
 
-Use `--dry-run` first if anything about the target flight is uncertain — it reports what would happen without sending.
+## Step 6 — Sketches and diagrams
 
-Report back what actually landed: the tool prints the post-publish state (label, task count, page count). If the page count doesn't match what you uploaded, say so rather than declaring success.
+Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the A/B quadrant circle of an MDD, a crew's terrain sketch) are stored per **flight + task** and shown as a "📎 スケッチ / 見る" button on that task. The write API has no sketch action, so the upload itself is done by the user in the admin panel — your part is to make that a single click:
+
+1. Produce the image. A hand-drawn sheet photo is used as-is. A diagram embedded in a PDF is cropped at high zoom:
+   ```python
+   import pymupdf
+   page = pymupdf.open(pdf)[0]
+   page.get_pixmap(matrix=pymupdf.Matrix(4, 4), clip=pymupdf.Rect(x0, y0, x1, y1)).save(out)  # clip in PDF points = pixels/2 of a 2x render
+   ```
+2. State which flight + task it belongs to (from the handwritten label or the task the diagram sits under; when a photo shows print bleeding through from the back, trust the handwritten label).
+3. `SendUserFile` it with "管理画面の『5. タスク別スケッチ』→ <flight label> → Task <no> に追加".
+4. After they say it's uploaded, `taskboard_state.py list` — the sketch line must show `<flightKey> / Task <no>`.
+
+Task numbers restart every competition, so the flight key in that line is what proves the sketch landed on the right task and not on another competition's Task 2.
 
 ## When something fails partway
 
-Registration and page upload are separate calls, so a failure can leave the flight registered with only some pages. That's recoverable and worth stating plainly: re-running the same command replaces the pages from scratch. Don't retry silently in a loop — report which page failed and why.
+Registration and page upload are separate calls; a failure can leave the flight registered with no pages. Re-running the same command replaces the pages from scratch. Don't retry in a loop — report which page failed and why. A token mismatch ("トークンが一致しません") usually means the script property was changed; the user fixes it in Apps Script, nothing to do here.
 
 ## What this skill doesn't do
 
-It doesn't deploy the GAS backend or touch `clasp` — if the backend needs updating, that's the user's `clasp push` + new deployment version. It also doesn't handle per-task sketches; those still go through the admin panel.
+It doesn't deploy GAS, and it doesn't write sketches directly (see Step 6). It also doesn't decide on its own to archive or delete anything.

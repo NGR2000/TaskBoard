@@ -1,55 +1,75 @@
 ---
 name: taskboard-convert
-description: Converts a photo of a hot-air-balloon competition "Task data sheet" into TaskBoard's JSON format, ready to paste into the GAS admin panel. Use this whenever the user uploads a picture of a task sheet (competition or practice, e.g. "Watarase Practice" or a real championship data sheet) and asks to convert it, register it, or get it into TaskBoard — phrases like "変換して", "TaskBoard用に変換して", "JSONにして", "このタスクシートを登録したい", or just an uploaded task-sheet-looking photo with no more instruction than "お願い". Also use it proactively whenever a task-sheet image and any conversion-adjacent request appear together, even if the user doesn't name TaskBoard explicitly.
+description: Converts a hot-air-balloon competition "Task Data Sheet" — a photo, a PDF, or a URL of an event page that links to task-sheet PDFs — into TaskBoard's schemaVersion-2 JSON that the crew app renders. Use this whenever the user hands over a task sheet in any form and wants it converted, JSON-ified, or "into TaskBoard" ("変換して", "JSONにして", "このタスクシートを登録したい", "タスクシートが公表された" + a link, or just an uploaded task-sheet-looking file with "お願い"). Also use it when the user pastes a link to an event page (e.g. watchmefly.net) and mentions task sheets, flights, or training flights, even without naming TaskBoard. If they also want it registered/live, taskboard-publish builds on top of this skill.
 ---
 
 # TaskBoard task-sheet conversion
 
-Turn a photographed "Task data sheet" into the JSON this project's crew app understands, so the user can paste it straight into the GAS admin panel's registration textarea.
+Turn a "Task Data Sheet" into the JSON this project's crew app understands. The output is either pasted into the GAS admin panel by the user, or fed to `taskboard-publish`.
 
-## Before you start
+`README.md` at the repo root ("JSON スキーマ" and "Claude に渡す変換プロンプト") is the authoritative schema. Skim it fresh each time — it may have evolved since this skill was written. Existing schemaVersion-2 fixtures under `JSON/` (`kro2025_flight3.json`, `watarase_practice_20260808_flight1.json`) show the house style on real data. Ignore the old flat-format files (`Saku Balloon Festival *.JSON`, `*.txt`) — they are schema v1 and are not the pattern to follow.
 
-Read `README.md` at the repo root — the sections "JSON スキーマ" and "Claude に渡す変換プロンプト" are the authoritative schema and field list (valid `taskId`s, the `targets` vs `fields` shape, etc.). That file is the source of truth and may have evolved since this skill was written; skim it fresh each time rather than relying on memory of past conversions.
+## Step 0 — Get the sheet into a readable form
 
-## Step 1 — Read the image at full fidelity
+- **Photo / PDF upload**: render with PyMuPDF (`pymupdf`); Pillow and poppler are not installed here.
+  ```python
+  import pymupdf
+  page = pymupdf.open(path)[0]
+  page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).save(out_png)   # 2x is enough to read small print
+  print(page.get_text())                                          # digital PDFs: use this to double-check every number
+  ```
+  Photos open as a one-page PDF too. For a phone photo, `get_text()` returns nothing — read the image and zoom into anything unclear.
+- **URL**: the user may send an event page (watchmefly.net "event.php?e=…") rather than a file. `WebFetch` it and ask for the task-sheet links, then download each PDF with `curl -sS -L -o`. Those links often contain spaces — URL-encode them (`%20`). Check `file *.pdf` says "PDF document" before trusting the download; an error page saved as `.pdf` looks like a download success.
+- **Several sheets in one request** (training flights T1–T4, AM/PM of the same day): one JSON per sheet. Each becomes its own flight.
 
-Task sheets pack a lot into a small area: declaration rules, scoring-area descriptions, handwritten annotations, faint placeholder text. Getting this step wrong is the single biggest way a conversion goes bad, because a wrong transcription looks just as confident as a right one once it's in JSON.
+Use absolute paths in every command — the shell's working directory resets between calls in this environment.
 
-- Read the image, then crop and zoom into any region where you're not 100% sure of the text — long paragraph-style notes, coordinates, small print, handwriting — before you transcribe it. A blurry read at full-page scale is often crisp once cropped to a few hundred pixels tall.
-- Transcribe exactly what's printed, including oddities. If a field is an unfilled template placeholder (e.g. a QNH box that literally prints "10??"), write down "10??" — don't invent a plausible-looking real value. If a row is blank or just a dash, leave it out of `fields` rather than guessing.
-- Handwritten additions (a note, a correction, a "see photo" scrawled next to some numbers) are real content — carry them into `notes` or the relevant field, but don't blend them into the printed English text as if they were part of it.
-- Never renumber or reformat anything the sheet gives you a specific value for: `taskNo` stays exactly as printed, `date` stays in whatever format the sheet uses, labels stay in the sheet's own English wording (this is what lets the crew app's dictionary and the "always show unknown fields in English" fallback both work correctly).
+## Step 1 — Read faithfully, and check the story matches the paper
+
+Transcription mistakes look exactly as confident as correct data once they are JSON, so this step carries the risk.
+
+- Zoom into any region you are not sure about before transcribing. Use `get_text()` output to confirm coordinates, altitudes, times and marker numbers on digital PDFs.
+- Compare what the user *said* with what the sheet *says*. A user once called a "Slovak Balloon Cup, Veľká Lomnica, Slovakia" sheet "クロアチアの大会". Point out the mismatch and ask before finalising the competition name — don't silently pick either.
+- Transcribe what is printed, including oddities: placeholder values (`10??`), skipped enumeration letters (a, b, c, e, f — the sheet simply has no "d"), decimal commas (`2,5km`). Don't repair them. Rows that are blank or just `-` are omitted, not guessed.
+- Handwritten additions are real content — carry them into `notes` or the relevant field, but don't blend them into printed text.
+- On NTA-Competition sheets, a grey circle with a white "+" is the software's *missing-image placeholder*, not a rendering problem on your side. Real diagrams (e.g. the A/B quadrant circle) do render; refer to them in text ("see quadrant diagram") and offer to attach them as a sketch — see taskboard-publish.
 
 ## Step 2 — Shape it into schemaVersion 2
 
-Follow the schema in README.md. The two judgment calls that come up on almost every sheet:
+- `taskNo` exactly as printed, including prefixes (`"T7"` on training sheets). The app never renumbers, and the sketch feature keys on flight + task number.
+- `taskId` must be one of the README list (PDG, JDG, HWZ, FIN, FON, HNH, WSD, GBM, CRT, RTA, ELB, LRN, MDT, SFL, MDD, XDT, XDI, XDD, ANG, 3DT, APT). It drives the rule text and Japanese task name — don't supply `name`, the app fills it.
+- **Labels** keep the sheet's English wording, minus the layout enumeration (`a.` `b.` `c.`). Singular/plural differences between sheets ("Goals available for declaration(s)") are fine — the dictionary handles what it knows and shows the rest in English.
+- **Targets vs fields**: a goal with coordinates goes in `targets` (`{ "name": "A", "coordinates": "4816/3558", "altitude": "2333ft", "mma": "R30m" }`). Coordinates are written `NNNN/NNNN` and altitude `NNNft` regardless of how the sheet spaces them — formatting only, never a different number. Reference numbers without coordinates ("113, 114, 117") are a field, not a target.
+- **MMA**: one target → put `mma` on the target. One MMA shared by several goals (HWZ with Goal A/B) → task-level `mma`; the app copies it onto every target that lacks its own. `"sketch"` is a legitimate MMA value (the shape is defined by an attached drawing).
+- **Loggermarker** → task-level `loggerMarker` (`"2, 3, 4"` as printed). **Loggergoal** → a field `{ "label": "Loggergoal", "value": "1" }`.
+- `markerDrop` containing "gravity" or "GMD" makes the app show the red GMD warning by itself.
+- `scoringArea` is a task-level key ("entire contest area", or "MMA" when the sheet says so).
+- Per-task NOTES boxes → `notes`; a general remark under all tasks ("Task 1 PDG Goal must be at least 500m from all targets") → `basicInfo.notes`. Footer timestamps and "created with NTA Competition" are not notes.
 
-- **Targets vs. fields**: if a task gives an actual coordinate (and optionally altitude/MMA) for a goal, put it in `targets`. If it instead just lists reference numbers from a master goal list (e.g. a Hesitation Waltz's "113, 114, 115, 117, 118" with no coordinates), that's not a target — put it in `fields` under its own label instead of forcing it into the targets shape.
-- **taskId** must be one of the values README.md lists (PDG, JDG, HWZ, FIN, FON, HNH, WSD, GBM, CRT, RTA, ELB, LRN, MDT, SFL, MDD, XDT, XDI, XDD, ANG, 3DT, APT) — this is what drives the rule lookup and Japanese task name in the crew app.
-- A handful of task-level keys get special treatment beyond the README's minimal example — `scoringArea`, `loggerMarker`, and `mma` are recognized directly (the app auto-labels them "Scoring Area" / "Logger Marker", and folds a bare `mma` into a field only when no target already carries one). You don't need to force these into generic `fields` entries; look at an existing fixture like `JSON/kro2025_flight3.json` or `JSON/watarase_practice_20260808_flight1.json` for the pattern.
+### Dates — this decides the crew app's sort order
 
-## Step 3 — Add bilingual translations, but only where the dictionary can't help
+The app orders flights newest-first and groups the archive by year/month by pulling digit runs out of `basicInfo.date`. Formats that parse: `01.05.2025 AM`, `18.09.2022 PM`, `2026.9.17`, `2026年5月3日（日）AM`. An English month name (`03-May-2026`) does **not** — it lands the flight at the bottom as "unknown date".
 
-The crew app has a small dictionary that already translates short, enum-like values on its own — color names, "Free", "In Order", "Not Required", and so on. Anything short like that needs no extra work from you.
+- Numeric on the sheet → keep the sheet's format.
+- Month name → write the numeric equivalent in `date` and keep the printed string as a field (`{ "label": "Date / Time (as printed)", "value": "Sunday, 03-May-2026, AM 0510" }`) so nothing is lost. European sheets are DD/MM.
+- No date at all (training flights pilots fly whenever) → leave `date` out and ask. If the user gives a provisional date, use it and add a `Date (provisional)` field with a `valueJa` explaining where it came from, so the crew doesn't take it for a printed value.
 
-What the dictionary *can't* handle is a one-off sentence — a declaration-method paragraph, a scoring-area description, a results-note. For those, add a same-shape translation field so the app can show Japanese with the English original underneath:
+### Scoring period
 
-- A `fields[]` entry with a long/sentence-style `value` gets a sibling `valueJa` with a natural Japanese translation of that same value.
-- A task's `notes` (or `basicInfo.notes`), when present, gets a sibling `notesJa`.
+`scoringPeriodEnd` drives a live countdown, but only for clock times (`0745`, `09:00:00`). Relative ends like `TO+2,5h` are kept verbatim, render as text, and the countdown stays `--:--`. Say so when handing over — it looks like a bug otherwise.
 
-Rule of thumb: if you'd have to think about how to phrase the Japanese rather than just look up a word, it belongs here. If it's a single word or short fixed phrase, leave it alone — adding `valueJa` there is redundant and just adds noise. When in doubt, look at how existing fixtures under `JSON/*.json` handle similar fields (e.g. `kro2025_flight3.json`'s "Goals available for declaration" or `watarase_practice_20260808_flight1.json`'s RTA task) — they show the pattern on real data.
+## Step 3 — Bilingual text, only where the dictionary can't help
 
-## Step 4 — Validate, then hand it over
+The dictionary translates short enum-like values on its own (colours, "Free", "In Order", "not required", "entire contest area"). Add `valueJa` only to sentence-length values — declaration methods, scoring-area descriptions, validity-time rules, point A/B definitions; add `notesJa` to every `notes`. Rule of thumb: if you had to think about phrasing rather than look up a word, it needs `valueJa`. Distance limits ("min. 2km, max. no") are numbers, not sentences — leave them.
 
-Before showing the JSON to the user, check it actually parses — e.g. `node -e "JSON.parse(require('fs').readFileSync('/path', 'utf8'))"` if you wrote it to a file, or the equivalent inline check if you're holding it in memory. A syntax slip here means the user's paste into the admin panel fails, so don't skip it.
+## Step 4 — Validate and hand over
 
-Present the result as:
+`node -e "JSON.parse(require('fs').readFileSync('<path>','utf8'))"` before showing anything — a syntax slip means the paste into the admin panel fails.
 
-1. The final JSON in a single fenced code block, formatted so it can be copy-pasted directly into the admin panel's registration textarea as-is.
-2. A short bullet list of anything you weren't fully sure about — illegible text, unfilled placeholders you transcribed literally, handwritten additions, ambiguous target/field calls — so the user can double-check against the original photo before registering it. Skip this list if there was genuinely nothing worth flagging.
+Present:
+1. The JSON in one fenced block, paste-ready.
+2. A short list of what to double-check: unreadable text, placeholders kept literally, the country/name mismatch if any, a placeholder image, a relative scoring period, a date you normalised or invented.
 
-Don't register the flight yourself — this environment has no path to the live GAS admin panel or spreadsheet. Your job ends at handing over JSON the user can paste in themselves.
+To see it the way the crew will, `taskboard-publish/scripts/preview.js` renders any JSON through the real app (details in that skill). Worth doing even when you are only handing over JSON — a wrong coordinate is invisible in JSON and obvious on the card.
 
-## Step 5 — Save as a fixture, but only if asked
-
-If the user says they want to keep this as a test fixture (or asks to add it to the repo), save it under `JSON/` following the existing naming pattern (`kro2025_flightN.json`, `watarase_practice_YYYYMMDD_flightN.json`, or similar — match the competition/practice name and date). Otherwise, just hand over the JSON inline and leave the filesystem alone; most conversions are one-off registrations, not permanent fixtures.
+Don't register anything from here. Save under `JSON/` only if the user asks for a fixture.

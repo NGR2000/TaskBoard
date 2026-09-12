@@ -46,7 +46,7 @@
 | `tools/publish.py` | 変換済みJSONと原本を書き込みAPIへ送る（ワークフローB） |
 | `tools/make_icons.py` | `tools/icon-source.png` から PWA のアイコン一式を作り直す |
 | `tests/` | GASバックエンドをNode上で動かして確かめるテスト（デプロイ不要） |
-| `.claude/skills/` | Claude 用スキル（`taskboard-convert` = 変換、`taskboard-publish` = 反映まで一気に） |
+| `.claude/skills/` | Claude 用スキル（`taskboard-convert` = 変換、`taskboard-publish` = 反映・確認・スケッチ添付まで一気に）。`taskboard-publish/scripts/` にプレビュー撮影（`preview.js`）と本番状態の確認・アーカイブ（`taskboard_state.py`）を同梱 |
 | `docs/` | GitHub Pages に公開する閲覧用PWA |
 | `docs/app.js` | 正規化・辞書適用・複数フライトの同期と切替・描画 |
 | `docs/data/dictionary.json` | **用語辞書**（英語表記 → 日本語） |
