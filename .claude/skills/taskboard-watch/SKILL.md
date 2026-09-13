@@ -11,6 +11,12 @@ A crew member is away from the venue (often in a different country/timezone) and
 
 The wait is genuinely hours long and the event is genuinely external — never `sleep` in Bash for this. Use `mcp__Claude_Code_Remote__send_later` to have the session wake itself up. Each firing is one check: fetch, compare, decide, act or reschedule. This also means the loop survives you losing context — the message you schedule *is* the state that survives, so it must be self-contained (see below).
 
+## WebFetch caches by URL — this will make you miss the change
+
+`WebFetch` keeps a response cache per exact URL for 15 minutes. A polling loop that hits the *same* URL every 5–10 minutes is, by design, well inside that window — so most "recheck" calls after the first can silently return the earlier cached page instead of the live one, and "まだ変化なし" stops meaning anything. This isn't hypothetical: it happened during the Slovak Balloon Cup watch — two consecutive same-URL fetches seconds apart both showed the page's own displayed clock frozen at an earlier time, and only appending a throwaway query parameter (`&_cb=<anything unique>`) broke the cache and revealed the page had already moved on several minutes earlier, live-flight sheet included.
+
+**Always vary the URL on every fetch** — append `&_cb=` followed by something that changes each call (current epoch seconds is easiest: check with `date +%s` right before the call, or just increment a counter). Do this on the baseline fetch in Step 2 and on every fetch in Step 4; there is no fetch in this loop that should ever reuse an exact URL from a previous call.
+
 ## Step 1 — Establish the window, in UTC
 
 The user gives times in event-local time (a briefing time, "3時から"). Convert everything to UTC immediately — `date -u` gives you the current instant to anchor against, and every `send_later` call needs UTC math done correctly or the loop fires at the wrong time while you're asleep to notice.
@@ -26,8 +32,10 @@ If the start time is more than a few minutes away, schedule *one* `send_later` f
 Fetch the event page now and record every task-sheet PDF link with its label (flight number, date, AM/PM, status). This is the diff target for every future check — without it you can't tell "still nothing new" from "I forgot what was already there."
 
 ```
-WebFetch(url, "List every task sheet / task data sheet PDF link on this page, with flight number, date, AM/PM, and status (COMPLETE/CANCELLED/PROVISIONAL/LIVE/etc). Give exact URLs.")
+WebFetch(url + "&_cb=" + Date.now(), "List every task sheet / task data sheet PDF link on this page, with flight number, date, AM/PM, and status (COMPLETE/CANCELLED/PROVISIONAL/LIVE/etc). Give exact URLs.")
 ```
+
+(cache-busting suffix — see above — applies here too, not just in the polling loop, since a stale baseline is as bad as a stale recheck)
 
 Note which flight key the *next* sheet should continue from (if Flight 1 is `slovak2026-flight1` with tasks #1–5, the next one is Flight 2, tasks continuing from #6) — you'll want this ready at publish time, not worked out under time pressure when the sheet finally lands.
 
@@ -47,7 +55,7 @@ Don't rely on "see my last message" — write the whole thing again. This is che
 
 1. `ReadNotifications` first if the wake came in as one (it always does for `send_later`).
 2. Check the current time against the cutoff before anything else — if past it, stop here: tell the user nothing showed up (name the cancellation possibility) and don't schedule another `send_later`.
-3. `WebFetch` the page the same way as the baseline. Compare — a genuinely new row (new URL, or a status flip like PROVISIONAL→CANCELLED on the flight you're waiting for) is the signal.
+3. `WebFetch` the page the same way as the baseline — **with a fresh `&_cb=` value, never reused from a previous call** (see the cache warning above; this is the step where forgetting it costs the most). Compare — a genuinely new row (new URL, or a status flip like PROVISIONAL→CANCELLED on the flight you're waiting for) is the signal.
 4. **Nothing new**: one short line to the user (what time, next check when) and reschedule with the same self-contained message, refreshed baseline timestamp. Don't editorialize further — a string of short "まだ変化なし" is the correct texture for a watch like this, the user does not want a paragraph every 10 minutes.
 5. **Found it**: this is a live hand-off into `taskboard-convert` then `taskboard-publish` — download the PDF (URL-encode spaces), convert, render the preview, check for key collisions, publish, verify with `taskboard_state.py list`, then report. If the user's original request already said what to do once found ("反映したい", "アップして"), that's your go-ahead — don't re-ask before publishing, but still surface anything you're unsure about in the conversion, same as any other publish job.
 6. Whether idle or found, this is the point to notice if the write API hiccups (a POST that comes back as an HTML page instead of JSON has happened before and cleared on a bare retry — retry once before treating it as a real deployment problem).
