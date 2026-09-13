@@ -207,11 +207,13 @@
     ruleNo: 1, rule_number: 1, markerColor: 1, markerColour: 1, markerDrop: 1,
     scoringPeriodEnd: 1, scoringPeriodStart: 1, targets: 1, fields: 1, notes: 1,
     notesJa: 1, notes_ja: 1,
-    targetGPS: 1, targetColor: 1, targetColour: 1, mma: 1
+    targetGPS: 1, targetColor: 1, targetColour: 1, mma: 1,
+    cancelled: 1, changeNote: 1, changeNoteJa: 1, changeNote_ja: 1
   };
   var BASIC_RESERVED = {
     competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1,
-    notesJa: 1, notes_ja: 1, generalNotesJa: 1
+    notesJa: 1, notes_ja: 1, generalNotesJa: 1,
+    changeNotice: 1, changeNoticeJa: 1, changeNotice_ja: 1
   };
 
   function pushField(list, label, value, opts) {
@@ -219,11 +221,13 @@
     var f = { label: String(label), value: String(value).trim() };
     if (opts && opts.wide) f.wide = true;
     if (opts && !isBlank(opts.valueJa)) f.valueJa = String(opts.valueJa).trim();
+    if (opts && opts.changed) f.changed = true;
     list.push(f);
   }
 
-  /** 任意の形の fields（配列 or オブジェクト）を [{label,value,valueJa?}] に揃える。
-   *  valueJa はシート原文が長い自由記述の時だけ変換元(Claude)が添える和訳（無ければ辞書のみ）。 */
+  /** 任意の形の fields（配列 or オブジェクト）を [{label,value,valueJa?,changed?}] に揃える。
+   *  valueJa はシート原文が長い自由記述の時だけ変換元(Claude)が添える和訳（無ければ辞書のみ）。
+   *  changed はブリーフィング後の修正で値が変わった項目に変換元が付ける印（該当行を強調表示する）。 */
   function coerceFields(src) {
     var out = [];
     if (!src) return out;
@@ -234,7 +238,7 @@
         var label = f.label || f.name || f.key || f.en || '';
         var value = f.value !== undefined ? f.value : (f.val !== undefined ? f.val : '');
         var valueJa = firstOf(f.valueJa, f.value_ja, f.ja, '');
-        pushField(out, label, value, { wide: !!f.wide, valueJa: valueJa });
+        pushField(out, label, value, { wide: !!f.wide, valueJa: valueJa, changed: !!f.changed });
       });
     } else if (typeof src === 'object') {
       Object.keys(src).forEach(function (k) { pushField(out, humanize(k), src[k]); });
@@ -302,6 +306,9 @@
       scoringPeriodEnd: firstOf(t.scoringPeriodEnd, ''),
       notes: firstOf(t.notes, ''),
       notesJa: firstOf(t.notesJa, t.notes_ja, ''),
+      cancelled: !!t.cancelled,
+      changeNote: firstOf(t.changeNote, ''),
+      changeNoteJa: firstOf(t.changeNoteJa, t.changeNote_ja, ''),
       targets: normalizeTargets(t),
       fields: coerceFields(t.fields)
     };
@@ -347,6 +354,8 @@
       date: firstOf(b.date, ''),
       notes: firstOf(b.notes, b.generalNotes, ''),
       notesJa: firstOf(b.notesJa, b.notes_ja, b.generalNotesJa, ''),
+      changeNotice: firstOf(b.changeNotice, ''),
+      changeNoticeJa: firstOf(b.changeNoticeJa, b.changeNotice_ja, ''),
       fields: coerceFields(b.fields)
     };
     Object.keys(V1_BASIC).forEach(function (k) { pushField(info.fields, V1_BASIC[k], b[k]); });
@@ -780,15 +789,25 @@
     return '<div class="notes">📝 ' + esc(notes) + '</div>';
   }
 
+  /** ブリーフィング後の修正点。基本情報カードは既定で畳まれているため、
+   *  開閉状態に関わらず必ず見える位置（見出しの直下）に赤字で出す。 */
+  function renderChangeBanner(notice, noticeJa) {
+    if (isBlank(notice)) return '';
+    return '<div class="change-banner">📢 ' + esc(noticeJa || notice) +
+      (!isBlank(noticeJa) ? '<div class="change-banner-en">' + esc(notice) + '</div>' : '') +
+      '</div>';
+  }
+
   function renderBasic(info) {
     var open = !!state.open.basic;
-    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
-    if (!rows && !info.notes) return '';
+    var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa, f.changed); }).join('');
+    if (!rows && !info.notes && isBlank(info.changeNotice)) return '';
     return '<div class="card">' +
       '<div class="card-header" data-act="toggle" data-key="basic">' +
         '<div class="task-head"><h2>📋 基本情報 <span class="rule-no">Event Information</span></h2></div>' +
         '<span class="chevron">' + (open ? '▲' : '▼') + '</span>' +
       '</div>' +
+      renderChangeBanner(info.changeNotice, info.changeNoticeJa) +
       (open ? '<div class="card-body">' + rows +
         renderNotes(info.notes, info.notesJa) +
         '</div>' : '') +
@@ -804,7 +823,8 @@
     var head = '<div class="task-head">' +
       '<span class="task-no">' + esc(labelTaskNo(task)) + '</span>' +
       '<span class="task-id">' + esc(task.taskId || '—') + '</span>' +
-      (task.isGMD ? '<span class="badge-gmd">🚨 GMD</span>' : '') +
+      (task.cancelled ? '<span class="badge-cancelled">🚫 キャンセル</span>' : '') +
+      (task.isGMD && !task.cancelled ? '<span class="badge-gmd">🚨 GMD</span>' : '') +
       '<span>' +
         (nameJa ? '<span class="task-name-ja">' + esc(nameJa) + '</span>' : '') +
         (task.name ? '<span class="task-name-en">' + esc(task.name) + '</span>' : '') +
@@ -818,21 +838,26 @@
     var body = '';
     if (open) {
       body = '<div class="card-body">';
-      if (task.isGMD) {
+      if (!isBlank(task.changeNote)) {
+        body += '<div class="change-alert">⚠️ ' + esc(task.changeNoteJa || task.changeNote) +
+          (!isBlank(task.changeNoteJa) ? '<div class="change-alert-en">' + esc(task.changeNote) + '</div>' : '') +
+          '</div>';
+      }
+      if (task.isGMD && !task.cancelled) {
         body += '<div class="gmd-alert">🚨 GMD（重力落下）— 投げると距離ペナルティ<br>' +
           '<span style="font-weight:400;font-size:12px">Gravity Marker Drop: 両足をゴンドラに付けたまま落下させること</span></div>';
       }
       body += renderTargets(task);
       if (!isBlank(task.markerColor)) body += renderRow('Marker Colour', task.markerColor);
       if (!isBlank(task.markerDrop)) body += renderRow('Marker Drop', task.markerDrop);
-      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa); }).join('');
-      body += renderTimer(task);
+      body += task.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa, f.changed); }).join('');
+      if (!task.cancelled) body += renderTimer(task);
       body += renderNotes(task.notes, task.notesJa);
       body += renderAttach(task);
       body += '</div>';
     }
 
-    return '<div class="card' + (task.isGMD ? ' alert' : '') + '">' +
+    return '<div class="card' + (task.isGMD && !task.cancelled ? ' alert' : '') + (task.cancelled ? ' cancelled' : '') + '">' +
       '<div class="card-header" data-act="toggle" data-key="' + key + '">' + head + '</div>' +
       body + '</div>';
   }
@@ -847,20 +872,21 @@
 
   /** ラベル1行: 日本語を大きく、タスクシートの英語原文を小さく
    *  valueJa は辞書に無い自由記述の和訳（変換時にClaudeが添えたもの）。辞書一致が無い時だけ使う。 */
-  function renderRow(label, value, wide, valueJa) {
+  function renderRow(label, value, wide, valueJa, changed) {
     if (isBlank(value)) return '';
     var L = lookupLabel(label);
     var V = lookupValue(value);
     if (!V.known && !isBlank(valueJa)) V = { ja: valueJa, en: value, known: true, color: V.color };
     var labelHtml = '<span class="label-ja">' + esc(L.ja) +
-      (L.known ? '' : '<span class="unknown-flag">辞書外</span>') + '</span>' +
+      (L.known ? '' : '<span class="unknown-flag">辞書外</span>') +
+      (changed ? '<span class="changed-flag">変更</span>' : '') + '</span>' +
       (L.en ? '<span class="label-en">' + esc(L.en) + '</span>' : '');
     var valueHtml =
       (V.color ? '<span class="dot" style="color:' + esc(V.color) + '">● </span>' : '') +
       '<span class="value-ja">' + esc(V.ja) + '</span>' +
       (V.en ? '<span class="value-en">' + esc(V.en) + '</span>' : '');
     var isLong = String(value).length > 32;
-    return '<div class="row' + (wide || isLong ? ' wide' : '') + '">' +
+    return '<div class="row' + (wide || isLong ? ' wide' : '') + (changed ? ' changed' : '') + '">' +
       '<span class="row-label">' + labelHtml + '</span>' +
       '<span class="row-value">' + valueHtml + '</span></div>';
   }

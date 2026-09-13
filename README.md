@@ -237,6 +237,44 @@ python3 tools/publish.py --json flight.json --original tds.pdf
 だけ `valueJa` を添えると、日本語を太字・英語原文を小さくその下に二重表記する。
 `notes` / `basicInfo.notes` も同様に `notesJa` を添えられる（無ければ従来通り英語のみ表示）。
 
+### ブリーフィング後の変更（キャンセル・修正）
+
+競技中にタスクがキャンセルされたり内容が修正されたりした時のためのフィールド。
+一度登録したフライトのJSONに追記して同じ `key` で再登録すると、クルー画面に変更が分かる形で出る。
+
+```jsonc
+{
+  "basicInfo": {
+    "changeNotice": "Task 9 and Task 10 cancelled after briefing (13/09 announcement)",
+    "changeNoticeJa": "ブリーフィング後の発表により Task 9・Task 10 がキャンセルになりました（13/09）"
+    // ↑ 基本情報の見出し直下に赤字で常時表示（カードが畳まれていても見える）
+  },
+  "tasks": [
+    {
+      "taskNo": "9",
+      "cancelled": true   // ← カード全体をグレーアウトし、「🚫 キャンセル」バッジを出す。カウントダウンも止める
+    },
+    {
+      "taskNo": "11",
+      "changeNote": "Goal coordinates corrected after briefing",
+      "changeNoteJa": "ブリーフィング後にゴール座標が修正されました",
+      // ↑ タスクカード内に黄色の注意ボックスとして表示
+      "targets": [
+        { "coordinates": "5764/4400", "altitude": "2126ft", "mma": "R30m" }
+      ],
+      "fields": [
+        // 具体的にどの項目が変わったかを示したい時は、その項目に changed: true を付ける
+        { "label": "Goals available for declaration", "value": "...", "changed": true }
+      ]
+    }
+  ]
+}
+```
+
+`cancelled` はタスク単位、`changeNotice`/`changeNoticeJa` はフライト全体（基本情報）向け、
+`changeNote`/`changeNoteJa` は個別タスク向け、`fields[].changed` はその中でもさらに
+特定の項目だけを目立たせたい時に使う。すべて省略可能で、無ければ今まで通りの表示になる。
+
 ---
 
 ## Claude に渡す変換プロンプト
