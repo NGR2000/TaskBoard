@@ -213,7 +213,7 @@
   var BASIC_RESERVED = {
     competitionName: 1, CompetitionName: 1, date: 1, notes: 1, generalNotes: 1, fields: 1,
     notesJa: 1, notes_ja: 1, generalNotesJa: 1,
-    changeNotice: 1, changeNoticeJa: 1, changeNotice_ja: 1
+    changeNotice: 1, changeNoticeJa: 1, changeNotice_ja: 1, changeHistory: 1
   };
 
   function pushField(list, label, value, opts) {
@@ -347,6 +347,23 @@
     return '';
   }
 
+  /** ブリーフィング後の変更履歴。新しい変更が来るたびに追記していく前提の配列で、
+   *  末尾（配列の最後）が最新。at は「いつ確定した情報か」を人間が読める形で
+   *  書いた文字列（正確な発表時刻が分からない時に無理に時刻を捏造しないため、
+   *  ISO日時ではなくフリーテキストを許容する）。 */
+  function normalizeChangeHistory(src) {
+    if (!Array.isArray(src)) return [];
+    return src.map(function (h) {
+      if (!h) return null;
+      if (typeof h === 'string') return { at: '', notice: h, noticeJa: '' };
+      return {
+        at: firstOf(h.at, h.time, ''),
+        notice: firstOf(h.notice, ''),
+        noticeJa: firstOf(h.noticeJa, h.notice_ja, '')
+      };
+    }).filter(function (h) { return h && !isBlank(h.notice || h.noticeJa); });
+  }
+
   function normalizeBasic(src) {
     var b = src || {};
     var info = {
@@ -356,6 +373,7 @@
       notesJa: firstOf(b.notesJa, b.notes_ja, b.generalNotesJa, ''),
       changeNotice: firstOf(b.changeNotice, ''),
       changeNoticeJa: firstOf(b.changeNoticeJa, b.changeNotice_ja, ''),
+      changeHistory: normalizeChangeHistory(b.changeHistory),
       fields: coerceFields(b.fields)
     };
     Object.keys(V1_BASIC).forEach(function (k) { pushField(info.fields, V1_BASIC[k], b[k]); });
@@ -790,24 +808,43 @@
   }
 
   /** ブリーフィング後の修正点。基本情報カードは既定で畳まれているため、
-   *  開閉状態に関わらず必ず見える位置（見出しの直下）に赤字で出す。 */
-  function renderChangeBanner(notice, noticeJa) {
-    if (isBlank(notice)) return '';
-    return '<div class="change-banner">📢 ' + esc(noticeJa || notice) +
-      (!isBlank(noticeJa) ? '<div class="change-banner-en">' + esc(notice) + '</div>' : '') +
-      '</div>';
+   *  開閉状態に関わらず必ず見える位置（見出しの直下）に赤字で出す。
+   *  過去の変更が history にあれば、その下に折りたたみの更新履歴を出す
+   *  （<details> はJS無しで開閉できるので、カード本体の開閉状態と独立して使える）。 */
+  function renderChangeBanner(notice, noticeJa, history) {
+    var hasNotice = !isBlank(notice);
+    var hist = (history || []).filter(function (h) { return !isBlank(h.notice) || !isBlank(h.noticeJa); });
+    if (!hasNotice && !hist.length) return '';
+    var out = '<div class="change-banner">';
+    if (hasNotice) {
+      out += '📢 ' + esc(noticeJa || notice) +
+        (!isBlank(noticeJa) ? '<div class="change-banner-en">' + esc(notice) + '</div>' : '');
+    } else {
+      out += '📢 更新履歴';
+    }
+    if (hist.length) {
+      out += '<details class="change-history"><summary>更新履歴（' + hist.length + '件）</summary><ul>' +
+        hist.slice().reverse().map(function (h) {
+          return '<li>' + (h.at ? '<span class="change-history-at">' + esc(h.at) + '</span> ' : '') +
+            esc(h.noticeJa || h.notice) +
+            (!isBlank(h.noticeJa) && !isBlank(h.notice) && h.notice !== h.noticeJa ? '<span class="change-history-en">' + esc(h.notice) + '</span>' : '') +
+            '</li>';
+        }).join('') + '</ul></details>';
+    }
+    out += '</div>';
+    return out;
   }
 
   function renderBasic(info) {
     var open = !!state.open.basic;
     var rows = info.fields.map(function (f) { return renderRow(f.label, f.value, f.wide, f.valueJa, f.changed); }).join('');
-    if (!rows && !info.notes && isBlank(info.changeNotice)) return '';
+    if (!rows && !info.notes && isBlank(info.changeNotice) && !info.changeHistory.length) return '';
     return '<div class="card">' +
       '<div class="card-header" data-act="toggle" data-key="basic">' +
         '<div class="task-head"><h2>📋 基本情報 <span class="rule-no">Event Information</span></h2></div>' +
         '<span class="chevron">' + (open ? '▲' : '▼') + '</span>' +
       '</div>' +
-      renderChangeBanner(info.changeNotice, info.changeNoticeJa) +
+      renderChangeBanner(info.changeNotice, info.changeNoticeJa, info.changeHistory) +
       (open ? '<div class="card-body">' + rows +
         renderNotes(info.notes, info.notesJa) +
         '</div>' : '') +

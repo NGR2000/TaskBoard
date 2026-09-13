@@ -246,8 +246,20 @@ python3 tools/publish.py --json flight.json --original tds.pdf
 {
   "basicInfo": {
     "changeNotice": "Task 9 and Task 10 cancelled after briefing (13/09 announcement)",
-    "changeNoticeJa": "ブリーフィング後の発表により Task 9・Task 10 がキャンセルになりました（13/09）"
+    "changeNoticeJa": "ブリーフィング後の発表により Task 9・Task 10 がキャンセルになりました（13/09）",
     // ↑ 基本情報の見出し直下に赤字で常時表示（カードが畳まれていても見える）
+    // "現在の変更" は1件だけ。過去の変更も残したい時は changeHistory に追記していく
+    // （新しい変更が来るたびに、直前の changeNotice を末尾に足してから上書きする）
+    "changeHistory": [
+      {
+        "at": "9/13",
+        // ↑ 正確な発表時刻が分からない時は無理に時刻を書かない。日付だけ、
+        //   「ブリーフィングにて」など、実際に確認できた粒度でよい
+        "notice": "Task 9 and Task 10 cancelled after briefing",
+        "noticeJa": "ブリーフィング後の発表により Task 9・Task 10 がキャンセルになりました"
+      }
+    ]
+    // ↑ 赤バナーの下に「更新履歴（N件）」として折りたたみ表示。新しい方が上に出る
   },
   "tasks": [
     {
@@ -273,7 +285,9 @@ python3 tools/publish.py --json flight.json --original tds.pdf
 
 `cancelled` はタスク単位、`changeNotice`/`changeNoticeJa` はフライト全体（基本情報）向け、
 `changeNote`/`changeNoteJa` は個別タスク向け、`fields[].changed` はその中でもさらに
-特定の項目だけを目立たせたい時に使う。すべて省略可能で、無ければ今まで通りの表示になる。
+特定の項目だけを目立たせたい時に使う。`basicInfo.changeHistory` は複数回の変更を積み重ねて
+残すための配列（省略時は履歴なし＝現在の `changeNotice` だけが表示される）。すべて省略可能で、
+無ければ今まで通りの表示になる。
 
 ---
 

@@ -121,6 +121,15 @@ button { font: inherit; cursor: pointer; }
   padding: 10px 14px; color: var(--danger); font-weight: 700; font-size: 13.5px; line-height: 1.6;
 }
 .change-banner-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.8; }
+.change-history { margin-top: 8px; font-weight: 400; }
+.change-history summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--danger); list-style: none; }
+.change-history summary::-webkit-details-marker { display: none; }
+.change-history summary::before { content: '▶ '; }
+.change-history[open] summary::before { content: '▼ '; }
+.change-history ul { margin: 6px 0 0; padding-left: 18px; }
+.change-history li { font-size: 12.5px; font-weight: 400; margin-bottom: 5px; line-height: 1.5; }
+.change-history-at { font-weight: 700; opacity: 0.85; margin-right: 4px; }
+.change-history-en { display: block; font-size: 11px; opacity: 0.75; margin-top: 1px; }
 .card-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: 12px 14px; background: var(--panel); user-select: none; cursor: pointer;
