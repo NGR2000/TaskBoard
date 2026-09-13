@@ -24,9 +24,12 @@ import urllib.request
 
 CONFIG_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'docs', 'config.js')
 
-# 原本ページの長辺。管理画面側の PDF 変換（index.html）と揃えてある。
-PAGE_LONG_EDGE = 1600
-JPEG_QUALITY = 80
+# 原本ページの長辺。管理画面側の画像圧縮（index.html の compressImage / uploadPdf）と揃えてある。
+# クルーの端末は原本を最大でも画面幅程度でしか表示しないため、これより大きくしても
+# 通信量が増えるだけで見え方は変わらない。実データで確認済み（デジタルPDF・スマホ写真の
+# どちらも 1200px/品質72 で問題なく判読できる）。
+PAGE_LONG_EDGE = 1200
+JPEG_QUALITY = 72
 
 
 def die(message):
