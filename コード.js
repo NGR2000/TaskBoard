@@ -203,6 +203,7 @@ function clearImages_(key) {
       deleted++;
     }
   });
+  invalidateFlightsCache_();
   return deleted;
 }
 
@@ -372,8 +373,29 @@ function taskSummary_(jsonStr) {
 /**
  * 閲覧アプリが最初に叩くエンドポイント。フライトの一覧（メタ情報のみ）を返す。
  * 各フライトの中身（json）はここでは返さない。action=flight で個別に取りに来る。
+ *
+ * ここは「↻」を押すたび、アプリ起動のたびに呼ばれる一番のホットパス。
+ * imagePages はフライトごとに getSheetByName を何度も呼び、sketches は
+ * スプレッドシート全シートを毎回スキャンする —— どちらも中身は書き込み
+ * （登録・アーカイブ・原本アップ）でしか変わらないのに、参照のたびに
+ * ゼロから作り直していた。書き込み側で invalidateFlightsCache_() を
+ * 呼ぶ前提で、短時間だけ結果をキャッシュして無駄な再計算を無くす。
  */
+var FLIGHTS_CACHE_KEY = 'apiFlights_v1';
+var FLIGHTS_CACHE_TTL_SEC = 60;
+
+function invalidateFlightsCache_() {
+  try { CacheService.getScriptCache().remove(FLIGHTS_CACHE_KEY); } catch (e) { /* キャッシュが使えなくても致命的ではない */ }
+}
+
 function apiFlights_() {
+  var cache = CacheService.getScriptCache();
+  var cached;
+  try { cached = cache.get(FLIGHTS_CACHE_KEY); } catch (e) { cached = null; }
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* 壊れていたら素通りして作り直す */ }
+  }
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var rows = readFlightRows_();
   var flights = rows.map(function (r) {
@@ -389,7 +411,9 @@ function apiFlights_() {
       imagePages: countImagePages_(ss, r.key)
     };
   });
-  return { ok: true, version: 3, flights: flights, sketches: listSketchKeys_(ss, rows) };
+  var out = { ok: true, version: 3, flights: flights, sketches: listSketchKeys_(ss, rows) };
+  try { cache.put(FLIGHTS_CACHE_KEY, JSON.stringify(out), FLIGHTS_CACHE_TTL_SEC); } catch (e) { /* 5万字/100KB超えなど。無くても動く */ }
+  return out;
 }
 
 /** 指定フライトの中身（タスクJSON本体）を返す */
@@ -487,6 +511,7 @@ function saveFlight(auth, key, label, dataStr) {
   } else {
     sheet.appendRow([finalKey, finalLabel, date, now, dataStr, '']);
   }
+  invalidateFlightsCache_();
   return { ok: true, key: finalKey, label: finalLabel, taskCount: parsed.tasks.length };
 }
 
@@ -515,6 +540,7 @@ function deleteFlight(auth, key) {
         var name = s.getName();
         if (name.indexOf(IMAGE_PREFIX + key + '_') === 0 || name === IMAGE_PREFIX + key) ss.deleteSheet(s);
       });
+      invalidateFlightsCache_();
       return true;
     }
   }
@@ -534,6 +560,7 @@ function setFlightArchived(auth, key, archived) {
     if (rows[i].key === key) {
       var value = archived ? new Date().toISOString() : '';
       sheet.getRange(rows[i].rowIndex, col).setValue(value);
+      invalidateFlightsCache_();
       return { ok: true, key: key, archived: value };
     }
   }
@@ -548,6 +575,7 @@ function saveImageData(auth, key, page, imageData) {
   var name = IMAGE_PREFIX + key + '_' + (Number(page) || 1);
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
+  invalidateFlightsCache_(); // imagePages が変わる
   return true;
 }
 
@@ -559,6 +587,7 @@ function deleteLastImagePage(auth, key) {
   if (n === 0) return false;
   var sheet = ss.getSheetByName(IMAGE_PREFIX + key + '_' + n) || ss.getSheetByName(IMAGE_PREFIX + key);
   if (sheet) ss.deleteSheet(sheet);
+  invalidateFlightsCache_();
   return true;
 }
 
@@ -569,6 +598,7 @@ function saveSketchData(auth, flightKey, taskNo, imageData) {
   var name = sketchSheetName_(flightKey, taskNo);
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
+  invalidateFlightsCache_(); // sketches 一覧が変わる
   return true;
 }
 
@@ -576,6 +606,7 @@ function deleteSketchData(auth, flightKey, taskNo) {
   requireWriteAuth_(auth);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sketchSheetName_(flightKey, taskNo));
   if (sheet) sheet.clearContents();
+  invalidateFlightsCache_();
   return true;
 }
 
@@ -629,5 +660,6 @@ function resetAllData(auth) {
       ss.deleteSheet(sheet);
     }
   });
+  invalidateFlightsCache_();
   return true;
 }
