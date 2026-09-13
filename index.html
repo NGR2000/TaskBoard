@@ -437,13 +437,13 @@ function uploadPdf(file) {
         chain = chain.then(function () {
           return pdf.getPage(pageNum).then(function (page) {
             var raw = page.getViewport({ scale: 1 });
-            var scale = Math.min(2, 1600 / Math.max(raw.width, raw.height));
+            var scale = Math.min(2, 1200 / Math.max(raw.width, raw.height));
             var viewport = page.getViewport({ scale: scale });
             var canvas = document.createElement('canvas');
             canvas.width = viewport.width;
             canvas.height = viewport.height;
             return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise
-              .then(function () { return savePage(startPage + pageNum, canvas.toDataURL('image/jpeg', 0.8)); });
+              .then(function () { return savePage(startPage + pageNum, canvas.toDataURL('image/jpeg', 0.72)); });
           });
         });
       };
