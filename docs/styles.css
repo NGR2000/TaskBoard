@@ -113,6 +113,23 @@ button { font: inherit; cursor: pointer; }
 /* ---------- card ---------- */
 .card { border: 2px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; }
 .card.alert { border-color: var(--danger); border-width: 3px; }
+.card.cancelled { opacity: 0.6; filter: grayscale(0.6); }
+
+/* 変更あり: 基本情報の見出し直下（開閉状態に関わらず常に見える位置） */
+.change-banner {
+  background: var(--danger-bg); border-top: 2px solid var(--danger); border-bottom: 2px solid var(--danger);
+  padding: 10px 14px; color: var(--danger); font-weight: 700; font-size: 13.5px; line-height: 1.6;
+}
+.change-banner-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.8; }
+.change-history { margin-top: 8px; font-weight: 400; }
+.change-history summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--danger); list-style: none; }
+.change-history summary::-webkit-details-marker { display: none; }
+.change-history summary::before { content: '▶ '; }
+.change-history[open] summary::before { content: '▼ '; }
+.change-history ul { margin: 6px 0 0; padding-left: 18px; }
+.change-history li { font-size: 12.5px; font-weight: 400; margin-bottom: 5px; line-height: 1.5; }
+.change-history-at { font-weight: 700; opacity: 0.85; margin-right: 4px; }
+.change-history-en { display: block; font-size: 11px; opacity: 0.75; margin-top: 1px; }
 .card-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: 12px 14px; background: var(--panel); user-select: none; cursor: pointer;
@@ -142,6 +159,7 @@ button { font: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .badge-gmd { font-size: 12px; font-weight: 700; color: var(--danger); }
+.badge-cancelled { font-size: 11px; font-weight: 700; color: #fff; background: #666; border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
 
 /* ---------- rows: 日本語を大きく / 英語を小さく ---------- */
 .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -157,9 +175,11 @@ button { font: inherit; cursor: pointer; }
 .row.wide .row-value { text-align: left; margin-top: 3px; }
 .row.wide .value-ja, .row.wide .value-en { white-space: pre-line; }
 .row.highlight { background: #f4f8ff; margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+.row.changed { background: var(--warn-bg); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
 .dot { font-size: 15px; }
 
 .unknown-flag { font-size: 10px; color: #b36b00; background: var(--warn-bg); border: 1px solid #e6cf95; border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; }
+.changed-flag { font-size: 10px; color: #fff; background: var(--warn); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; font-weight: 700; }
 
 /* ---------- targets ---------- */
 .targets { margin: 10px 0; }
@@ -179,6 +199,11 @@ button { font: inherit; cursor: pointer; }
   background: var(--danger-bg); border: 2px solid var(--danger); border-radius: 9px;
   padding: 9px 12px; margin: 10px 0; color: var(--danger); font-weight: 700; font-size: 14px; line-height: 1.55;
 }
+.change-alert {
+  background: var(--warn-bg); border: 2px solid var(--warn); border-radius: 9px;
+  padding: 9px 12px; margin: 10px 0; color: var(--warn); font-weight: 700; font-size: 13.5px; line-height: 1.55;
+}
+.change-alert-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.8; }
 .notes { margin-top: 10px; padding: 9px 12px; background: var(--warn-bg); border: 1px solid #e0c07a; border-radius: 9px; font-size: 13.5px; color: #5a4300; line-height: 1.65; }
 .notes-ja { font-weight: 600; }
 .notes-en { margin-top: 4px; font-size: 12px; font-weight: 400; opacity: 0.75; }
