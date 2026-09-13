@@ -76,6 +76,8 @@
     { "ja": "最小時間", "en": "Minimum Time", "keys": ["minimumtime", "mintime"] },
     { "ja": "最大時間", "en": "Maximum Time", "keys": ["maximumtime", "maxtime"] },
     { "ja": "計時", "en": "Timing", "keys": ["timing", "timingarrangement", "timingarrangements"] },
+    { "ja": "タイミング（計時）の取り決め", "en": "Arrangements of Timing", "keys": ["arrangementsoftiming"] },
+    { "ja": "設定された最小時間または距離", "en": "Minimum Set Time or Distance", "keys": ["minimumsettimeordistance"] },
     { "ja": "基準点", "en": "Reference Point", "keys": ["referencepoint", "refpoint", "reference"] },
     { "ja": "設定方向", "en": "Set Direction", "keys": ["setdirection", "direction"] },
     { "ja": "トラックポイント", "en": "Track Point", "keys": ["trackpoint", "trackpoints"] },
