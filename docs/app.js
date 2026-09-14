@@ -963,12 +963,20 @@
       '<div class="timer-display" id="timer' + task.index + '">--:--</div></div>';
   }
 
+  /** サムネイルがあれば軽量画像をそのままタップ対象にする（フルサイズは「見る」で別途取得）。
+   *  無ければ（古いスケッチ・サムネイル非対応で保存されたもの）従来のボタンにフォールバック。 */
   function renderAttach(task) {
     var no = String(task.taskNo || '');
     var flightKey = state.activeFlight;
-    var has = state.sketches.some(function (x) { return x.flightKey === flightKey && x.taskNo === no; }) ||
-      !!state.sketchCache[sketchCacheKey(flightKey, no)];
+    var entry = state.sketches.filter(function (x) { return x.flightKey === flightKey && x.taskNo === no; })[0];
+    var has = !!entry || !!state.sketchCache[sketchCacheKey(flightKey, no)];
     if (!has) return '<div class="attach empty">📎 スケッチなし</div>';
+    if (entry && entry.thumb) {
+      return '<div class="attach attach-has-thumb" data-act="sketch" data-taskno="' + esc(no) + '">' +
+        '<img class="attach-thumb" src="' + esc(entry.thumb) + '" alt="スケッチのプレビュー">' +
+        '<span class="attach-thumb-badge">🔍 タップで拡大</span>' +
+        '</div>';
+    }
     return '<div class="attach"><span>📎 スケッチ / Sketch</span>' +
       '<button class="btn-small" data-act="sketch" data-taskno="' + esc(no) + '">見る</button></div>';
   }
