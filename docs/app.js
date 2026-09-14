@@ -974,7 +974,8 @@
     if (entry && entry.thumb) {
       return '<div class="attach attach-has-thumb" data-act="sketch" data-taskno="' + esc(no) + '">' +
         '<img class="attach-thumb" src="' + esc(entry.thumb) + '" alt="スケッチのプレビュー">' +
-        '<span class="attach-thumb-badge">🔍 タップで拡大</span>' +
+        '<span>📎 スケッチ / Sketch</span>' +
+        '<span class="attach-thumb-hint">🔍 拡大</span>' +
         '</div>';
     }
     return '<div class="attach"><span>📎 スケッチ / Sketch</span>' +
