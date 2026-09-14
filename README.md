@@ -161,6 +161,30 @@ python3 tools/publish.py --json flight.json --original tds.pdf
 
 未設定の間、`doPost` は誰も通さない（設定し忘れが素通しにならないようにしてある）。
 
+### GASとの自動連携（mainにマージしたら自動デプロイ）
+
+`.github/workflows/deploy-gas.yml` が、`main` に `コード.js` / `index.html` などが
+push（＝PRのマージ）されるたびに `clasp push` → 既存デプロイの更新までを自動で行う。
+これが動いていれば、**Apps Scriptのエディタを開いたり手で貼り付けたりする必要は無くなる**
+（「デプロイを管理→新バージョン」も含めて自動）。
+
+初回だけ、次の2つをリポジトリの **Settings → Secrets and variables → Actions** に登録する:
+
+1. **`CLASP_CREDENTIALS`** — 手元のPCで
+   ```bash
+   npm install -g @google/clasp
+   clasp login
+   ```
+   を実行してGoogleアカウントでログインすると `~/.clasprc.json` ができる。その中身をそのまま貼る
+   （clasp用のOAuthトークンなので、GASの書き込みトークン `TASKBOARD_API_TOKEN` とは別物）。
+2. **`GAS_DEPLOYMENT_ID`** — Apps Scriptエディタの「デプロイを管理」に出ているデプロイID
+   （`clasp deployments` でも確認できる）。これを渡さないと `clasp deploy` が新しい別デプロイ
+   （＝別の `/exec` URL）を作ってしまうため、既存の本番URLを更新するには必須。
+
+`GAS_DEPLOYMENT_ID` を登録し忘れていても `CLASP_CREDENTIALS` さえあれば `clasp push` までは
+自動で走る（コードはApps Scriptプロジェクトに届くが、デプロイだけ手動で必要という状態になる）。
+ワークフローの実行結果は GitHub の「Actions」タブで確認できる。
+
 ### クルー
 
 1. 配られたURLを開く（ホーム画面に追加しておくとアプリとして起動する）

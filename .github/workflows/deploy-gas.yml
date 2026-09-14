@@ -1,0 +1,69 @@
+name: Deploy GAS backend
+
+# main にマージ（push）されたら、コード.js / index.html などを
+# Apps Script に自動で送り込み、既存のデプロイを更新するまでを行う。
+#
+# 必要な準備（README.md「GASとの自動連携」参照）:
+#   - CLASP_CREDENTIALS: `clasp login` 後にできる ~/.clasprc.json の中身
+#   - GAS_DEPLOYMENT_ID: Apps Script の「デプロイを管理」に出ているデプロイID
+# どちらもリポジトリの Settings → Secrets and variables → Actions で設定する。
+#
+# GAS_DEPLOYMENT_ID が無い場合は push だけ行い、デプロイはスキップする
+# （clasp deploy はID無しで実行すると新しいデプロイ＝別URLを作ってしまうため、
+#  既存の /exec を更新するには必ずIDを指定する必要がある）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'コード.js'
+      - 'index.html'
+      - 'appsscript.json'
+      - '.clasp.json'
+      - '.claspignore'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gas-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@2
+
+      - name: Write clasp credentials
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+        run: |
+          if [ -z "$CLASP_CREDENTIALS" ]; then
+            echo "::error::CLASP_CREDENTIALS シークレットが未設定です。README.md の手順で設定してください。"
+            exit 1
+          fi
+          printf '%s' "$CLASP_CREDENTIALS" > ~/.clasprc.json
+
+      - name: Push to Apps Script
+        run: clasp push --force
+
+      - name: Deploy (update existing /exec)
+        env:
+          GAS_DEPLOYMENT_ID: ${{ secrets.GAS_DEPLOYMENT_ID }}
+        run: |
+          if [ -z "$GAS_DEPLOYMENT_ID" ]; then
+            echo "::warning::GAS_DEPLOYMENT_ID が未設定のため push のみ行いました。Apps Script の『デプロイを管理』から手動でデプロイしてください。"
+            exit 0
+          fi
+          clasp deploy -i "$GAS_DEPLOYMENT_ID" -d "auto-deploy ${{ github.sha }}"
