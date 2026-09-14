@@ -177,6 +177,10 @@ push（＝PRのマージ）されるたびに `clasp push` → 既存デプロ�
    ```
    を実行してGoogleアカウントでログインすると `~/.clasprc.json` ができる。その中身をそのまま貼る
    （clasp用のOAuthトークンなので、GASの書き込みトークン `TASKBOARD_API_TOKEN` とは別物）。
+   **`~/.clasprc.json` の形式はclaspのメジャーバージョンで変わる**ので、`clasp --version` で
+   確認したバージョンと `.github/workflows/deploy-gas.yml` の `npm install -g @google/clasp@x.y.z`
+   を必ず合わせること。ズレると `Error retrieving access token: Cannot read properties of
+   undefined (reading 'access_token')` で失敗する（現在はv3.4.1に合わせてある）。
 2. **`GAS_DEPLOYMENT_ID`** — Apps Scriptエディタの「デプロイを管理」に出ているデプロイID
    （`clasp deployments` でも確認できる）。これを渡さないと `clasp deploy` が新しい別デプロイ
    （＝別の `/exec` URL）を作ってしまうため、既存の本番URLを更新するには必須。
