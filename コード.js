@@ -96,6 +96,13 @@ function doPost(e) {
       case 'clearImages':
         out = { ok: true, key: body.key, deleted: clearImages_(body.key) };
         break;
+      case 'saveSketch':
+        saveSketchData(body.token, body.flightKey, body.taskNo, body.imageData);
+        out = { ok: true, flightKey: String(body.flightKey || ''), taskNo: String(body.taskNo || '') };
+        break;
+      case 'deleteSketch':
+        out = { ok: deleteSketchData(body.token, body.flightKey, body.taskNo), flightKey: String(body.flightKey || ''), taskNo: String(body.taskNo || '') };
+        break;
       case 'deleteFlight':
         out = { ok: deleteFlight(body.token, body.key), key: body.key };
         break;

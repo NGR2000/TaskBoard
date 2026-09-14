@@ -77,7 +77,7 @@ A sheet registered only to test something should not stay in the crew's flight b
 
 ## Step 6 — Sketches and diagrams
 
-Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the A/B quadrant circle of an MDD, a crew's terrain sketch) are stored per **flight + task** and shown as a "📎 スケッチ / 見る" button on that task. The write API has no sketch action, so the upload itself is done by the user in the admin panel — your part is to make that a single click:
+Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the A/B quadrant circle of an MDD, a satellite-map crop, a crew's terrain sketch) are stored per **flight + task** and shown as a "📎 スケッチ / 見る" button on that task.
 
 1. Produce the image. A hand-drawn sheet photo is used as-is. A diagram embedded in a PDF is cropped at high zoom:
    ```python
@@ -85,9 +85,9 @@ Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the
    page = pymupdf.open(pdf)[0]
    page.get_pixmap(matrix=pymupdf.Matrix(4, 4), clip=pymupdf.Rect(x0, y0, x1, y1)).save(out)  # clip in PDF points = pixels/2 of a 2x render
    ```
-2. State which flight + task it belongs to (from the handwritten label or the task the diagram sits under; when a photo shows print bleeding through from the back, trust the handwritten label).
-3. `SendUserFile` it with "管理画面の『5. タスク別スケッチ』→ <flight label> → Task <no> に追加".
-4. After they say it's uploaded, `taskboard_state.py list` — the sketch line must show `<flightKey> / Task <no>`.
+2. Upload it directly with `tools/publish.py --key <flightKey> --sketch <taskNo>:<path>` (repeatable for several sketches in one flight: `--sketch 20:task20.png --sketch 22:task22.png`). This goes through the write API (`action: saveSketch`), same token as everything else — no admin-panel step needed. The command reports back whether each task number now shows up in the sketches list.
+3. If the API comes back with `unknown action: saveSketch` (or any non-JSON response), the deployed GAS is older than the repo (this action was added later — see git history for `コード.js`'s `doPost`). Fall back to the manual handoff: `SendUserFile` the image with "管理画面の『5. タスク別スケッチ』→ <flight label> → Task <no> に追加", then after the user confirms, verify with `taskboard_state.py list`. Tell the user the deployment is stale either way, since other newer write-API behavior may be missing too.
+4. Either path, finish with `taskboard_state.py list` — the sketch line must show `<flightKey> / Task <no>`.
 
 Task numbers restart every competition, so the flight key in that line is what proves the sketch landed on the right task and not on another competition's Task 2.
 
@@ -97,4 +97,4 @@ Registration and page upload are separate calls; a failure can leave the flight 
 
 ## What this skill doesn't do
 
-It doesn't deploy GAS, and it doesn't write sketches directly (see Step 6). It also doesn't decide on its own to archive or delete anything.
+It doesn't deploy GAS — if the deployed version doesn't yet have `saveSketch` (see Step 6), that's the user's step. It also doesn't decide on its own to archive or delete anything.
