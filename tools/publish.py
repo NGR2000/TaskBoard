@@ -122,6 +122,10 @@ def main():
     ap.add_argument('--token', default='', help='書き込みトークン（省略時は環境変数 TASKBOARD_TOKEN）')
     ap.add_argument('--keep-images', action='store_true',
                     help='既存の原本ページを消さずに後ろへ足す（既定は貼り直し）')
+    ap.add_argument('--sketch', action='append', default=[], metavar='TASKNO:PATH',
+                    help='タスク別スケッチ（図・手描き・地図の切り出しなど）を直接アップロードする。'
+                         '<タスク番号>:<画像パス> の形で複数指定可（--sketch 20:task20.png --sketch 22:task22.png）。'
+                         '--key で指定したフライトに紐づく。既存のスケッチは上書きされる。')
     ap.add_argument('--dry-run', action='store_true', help='送信せず、何をするかだけ表示する')
     args = ap.parse_args()
 
@@ -134,14 +138,14 @@ def main():
         die('トークンがありません。環境変数 TASKBOARD_TOKEN に設定してください'
             '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
 
-    # JSON を省略した時は「登録済みフライトに原本だけ足す」動き。
+    # JSON を省略した時は「登録済みフライトに原本・スケッチだけ足す」動き。
     # 既に登録されている内容とラベルには一切触らない。
     images_only = not args.json
     if images_only:
         if not args.key:
             die('--json を省略する場合は --key で対象フライトを指定してください。')
-        if not args.original:
-            die('--json も --original も無いので、やることがありません。')
+        if not args.original and not args.sketch:
+            die('--json も --original も --sketch も無いので、やることがありません。')
         raw, parsed = '', {}
     else:
         try:
@@ -156,14 +160,31 @@ def main():
         if not parsed.get('tasks'):
             die('tasks が入っていません。TaskBoard用のJSONか確認してください。')
 
+    sketches = []
+    if args.sketch:
+        if not args.key:
+            die('--sketch を使う場合は --key で対象フライトを指定してください。')
+        for entry in args.sketch:
+            if ':' not in entry:
+                die('--sketch は <タスク番号>:<画像パス> の形で指定してください: %r' % entry)
+            task_no, path = entry.split(':', 1)
+            task_no = task_no.strip()
+            if not task_no:
+                die('--sketch のタスク番号が空です: %r' % entry)
+            if not os.path.exists(path):
+                die('ファイルが見つかりません: ' + path)
+            sketches.append((task_no, path))
+
     pages = render_pages(args.original) if args.original else []
 
     print('反映先: %s' % api)
     if images_only:
-        print('対象フライト: %s（原本のみ差し替え・タスク内容は触りません）' % args.key)
+        print('対象フライト: %s（原本・スケッチのみ差し替え・タスク内容は触りません）' % args.key)
     else:
         print('タスク数: %d' % len(parsed['tasks']))
     print('原本ページ数: %d%s' % (len(pages), '（既存ページは貼り直し）' if pages and not args.keep_images else ''))
+    if sketches:
+        print('スケッチ: %s' % ', '.join('Task %s (%s)' % (t, p) for t, p in sketches))
     if args.dry_run:
         print('--dry-run のため送信しませんでした。')
         return
@@ -180,34 +201,50 @@ def main():
         key = saved.get('key', args.key)
         print('✅ 登録しました: %s（%s / %s タスク）' % (key, saved.get('label', ''), saved.get('taskCount', '?')))
 
-    if not pages:
-        print('原本の指定が無いので、ここまでで完了です。')
-        return
+    if pages:
+        if not args.keep_images:
+            cleared = post(api, token, {'action': 'clearImages', 'key': key})
+            if cleared.get('deleted'):
+                print('既存の原本 %d ページを消しました。' % cleared['deleted'])
+            start = 0
+        else:
+            state = post(api, token, {'action': 'state'})
+            current = [f for f in state.get('flights', []) if f.get('key') == key]
+            start = current[0].get('imagePages', 0) if current else 0
 
-    if not args.keep_images:
-        cleared = post(api, token, {'action': 'clearImages', 'key': key})
-        if cleared.get('deleted'):
-            print('既存の原本 %d ページを消しました。' % cleared['deleted'])
-        start = 0
-    else:
-        state = post(api, token, {'action': 'state'})
-        current = [f for f in state.get('flights', []) if f.get('key') == key]
-        start = current[0].get('imagePages', 0) if current else 0
+        for i, data_url in enumerate(pages, start=1):
+            post(api, token, {
+                'action': 'saveImage',
+                'key': key,
+                'page': start + i,
+                'imageData': data_url,
+            })
+            print('✅ 原本 %d/%d ページ目を保存しました（%d KB）' % (i, len(pages), len(data_url) // 1024))
 
-    for i, data_url in enumerate(pages, start=1):
+    for task_no, path in sketches:
+        data_url = render_pages([path])[0]
         post(api, token, {
-            'action': 'saveImage',
-            'key': key,
-            'page': start + i,
+            'action': 'saveSketch',
+            'flightKey': key,
+            'taskNo': task_no,
             'imageData': data_url,
         })
-        print('✅ 原本 %d/%d ページ目を保存しました（%d KB）' % (i, len(pages), len(data_url) // 1024))
+        print('✅ スケッチを保存しました: Task %s（%d KB）' % (task_no, len(data_url) // 1024))
+
+    if not pages and not sketches:
+        print('原本・スケッチの指定が無いので、ここまでで完了です。')
+        return
 
     state = post(api, token, {'action': 'state'})
     final = [f for f in state.get('flights', []) if f.get('key') == key]
     if final:
         print('反映後の状態: %s / %s タスク / 原本 %s ページ'
               % (final[0].get('label'), final[0].get('taskCount'), final[0].get('imagePages')))
+    if sketches:
+        have = {s.get('taskNo') for s in state.get('sketches', []) if s.get('flightKey') == key}
+        for task_no, _ in sketches:
+            mark = '✅' if task_no in have else '⚠️ 反映確認できず'
+            print('  スケッチ Task %s: %s' % (task_no, mark))
     print('完了です。クルーはアプリで「↻」を押すと反映されます。')
 
 
