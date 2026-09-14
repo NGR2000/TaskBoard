@@ -25,6 +25,11 @@ var SHEET_FLIGHTS = 'flights';
 var FLIGHTS_HEADER = ['key', 'label', 'date', 'updatedAt', 'json', 'archived'];
 var IMAGE_PREFIX = 'image_';
 var SKETCH_PREFIX = 'sketch_';
+// サムネイルは意図的に SKETCH_PREFIX を含まない名前にする。listSketchKeys_ が
+// "sketch_" で始まるシートを総なめしてタスク番号を復元する仕組みなので、
+// うっかり同じ接頭辞にすると「Task 20」の他に「Task 20_thumb」という
+// 存在しないタスクがスケッチ一覧に出てきてしまう。
+var SKETCH_THUMB_PREFIX = 'sketchthumb_';
 var CHUNK_SIZE = 40000; // 1セルの上限 5万字に対する安全マージン
 
 // =====================================================================
@@ -97,7 +102,7 @@ function doPost(e) {
         out = { ok: true, key: body.key, deleted: clearImages_(body.key) };
         break;
       case 'saveSketch':
-        saveSketchData(body.token, body.flightKey, body.taskNo, body.imageData);
+        saveSketchData(body.token, body.flightKey, body.taskNo, body.imageData, body.thumbData);
         out = { ok: true, flightKey: String(body.flightKey || ''), taskNo: String(body.taskNo || '') };
         break;
       case 'deleteSketch':
@@ -334,7 +339,14 @@ function listSketchKeys_(ss, rows) {
     var rest = name.substring(SKETCH_PREFIX.length); // "<flightKey>_<taskNo>"
     for (var i = 0; i < keys.length; i++) {
       if (rest.indexOf(keys[i] + '_') === 0) {
-        out.push({ flightKey: keys[i], taskNo: rest.substring(keys[i].length + 1) });
+        var flightKey = keys[i], taskNo = rest.substring(keys[i].length + 1);
+        // サムネイルは一覧のこの1回の走査でついでに読む。件数はスケッチの数だけ
+        // （タスク総数ではない）なので、ここに足しても apiFlights_ 全体の
+        // 重さにはほぼ効かない。無ければ undefined のまま（旧クライアント互換）。
+        var thumb = readChunks_(ss.getSheetByName(sketchThumbSheetName_(flightKey, taskNo)));
+        var entry = { flightKey: flightKey, taskNo: taskNo };
+        if (thumb) entry.thumb = thumb;
+        out.push(entry);
         return;
       }
     }
@@ -479,9 +491,21 @@ function sketchSheetName_(flightKey, taskNo) {
   return SKETCH_PREFIX + String(flightKey || '') + '_' + String(taskNo || '');
 }
 
+/** サムネイル（一覧にプレビュー表示するための軽量版）のシート名。 */
+function sketchThumbSheetName_(flightKey, taskNo) {
+  return SKETCH_THUMB_PREFIX + String(flightKey || '') + '_' + String(taskNo || '');
+}
+
 function getSketchData(flightKey, taskNo) {
   try {
     var name = sketchSheetName_(flightKey, taskNo);
+    return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name));
+  } catch (e) { return null; }
+}
+
+function getSketchThumb_(flightKey, taskNo) {
+  try {
+    var name = sketchThumbSheetName_(flightKey, taskNo);
     return readChunks_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name));
   } catch (e) { return null; }
 }
@@ -598,21 +622,30 @@ function deleteLastImagePage(auth, key) {
   return true;
 }
 
-function saveSketchData(auth, flightKey, taskNo, imageData) {
+/** thumbData は省略可（一覧にプレビュー表示する軽量版）。旧クライアントは渡してこない。 */
+function saveSketchData(auth, flightKey, taskNo, imageData, thumbData) {
   requireWriteAuth_(auth);
   if (!flightKey) throw new Error('フライトが指定されていません');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var name = sketchSheetName_(flightKey, taskNo);
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
   writeChunks_(sheet, imageData);
+  if (thumbData) {
+    var thumbName = sketchThumbSheetName_(flightKey, taskNo);
+    var thumbSheet = ss.getSheetByName(thumbName) || ss.insertSheet(thumbName);
+    writeChunks_(thumbSheet, thumbData);
+  }
   invalidateFlightsCache_(); // sketches 一覧が変わる
   return true;
 }
 
 function deleteSketchData(auth, flightKey, taskNo) {
   requireWriteAuth_(auth);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sketchSheetName_(flightKey, taskNo));
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sketchSheetName_(flightKey, taskNo));
   if (sheet) sheet.clearContents();
+  var thumbSheet = ss.getSheetByName(sketchThumbSheetName_(flightKey, taskNo));
+  if (thumbSheet) thumbSheet.clearContents();
   invalidateFlightsCache_();
   return true;
 }
@@ -663,7 +696,7 @@ function resetAllData(auth) {
   getFlightsSheet_();
   ss.getSheets().forEach(function (sheet) {
     var name = sheet.getName();
-    if (name.indexOf(IMAGE_PREFIX) === 0 || name.indexOf(SKETCH_PREFIX) === 0) {
+    if (name.indexOf(IMAGE_PREFIX) === 0 || name.indexOf(SKETCH_PREFIX) === 0 || name.indexOf(SKETCH_THUMB_PREFIX) === 0) {
       ss.deleteSheet(sheet);
     }
   });

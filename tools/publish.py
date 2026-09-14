@@ -31,6 +31,12 @@ CONFIG_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 PAGE_LONG_EDGE = 1200
 JPEG_QUALITY = 72
 
+# スケッチのプレビュー用サムネイル。タスクカードに直接埋め込んで表示するので、
+# 通信量を増やさないようにフルサイズよりずっと小さく・粗くする
+# （タップした時に見るフル解像度は別途 --sketch の imageData 側で送られる）。
+THUMB_LONG_EDGE = 320
+THUMB_JPEG_QUALITY = 55
+
 
 def die(message):
     print('エラー: ' + message, file=sys.stderr)
@@ -80,18 +86,26 @@ def post(api, token, payload):
     return out
 
 
-def render_pages(paths):
+def _open_pymupdf():
+    try:
+        import pymupdf as fitz
+        return fitz
+    except ImportError:
+        pass
+    try:
+        import fitz  # 古い PyMuPDF は fitz という名前でしか入らない
+        return fitz
+    except ImportError:
+        die('画像の変換には PyMuPDF が必要です。次を実行してください:\n  pip install pymupdf')
+
+
+def render_pages(paths, long_edge=PAGE_LONG_EDGE, quality=JPEG_QUALITY):
     """PDF はページごとに、画像はそのまま JPEG の data URL にして返す。
 
     PyMuPDF は PDF も画像も同じ Document として開けるので、
-    ページ分割と縮小を 1 本の経路で扱える。"""
-    try:
-        import pymupdf as fitz
-    except ImportError:
-        try:
-            import fitz  # 古い PyMuPDF は fitz という名前でしか入らない
-        except ImportError:
-            die('原本の変換には PyMuPDF が必要です。次を実行してください:\n  pip install pymupdf')
+    ページ分割と縮小を 1 本の経路で扱える。long_edge/quality を変えれば
+    同じ経路でサムネイルも作れる（render_thumbnail 参照）。"""
+    fitz = _open_pymupdf()
 
     pages = []
     for path in paths:
@@ -103,12 +117,17 @@ def render_pages(paths):
             die('%s を開けませんでした: %s' % (path, e))
         for page in doc:
             raw = page.rect
-            scale = min(2.0, PAGE_LONG_EDGE / max(raw.width, raw.height))
+            scale = min(2.0, long_edge / max(raw.width, raw.height))
             pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-            data = pix.tobytes('jpeg', jpg_quality=JPEG_QUALITY)
+            data = pix.tobytes('jpeg', jpg_quality=quality)
             pages.append('data:image/jpeg;base64,' + base64.b64encode(data).decode('ascii'))
         doc.close()
     return pages
+
+
+def render_thumbnail(path):
+    """1枚の画像/PDF先頭ページから、タスクカードに埋め込む軽量プレビューを作る。"""
+    return render_pages([path], long_edge=THUMB_LONG_EDGE, quality=THUMB_JPEG_QUALITY)[0]
 
 
 def main():
@@ -223,13 +242,16 @@ def main():
 
     for task_no, path in sketches:
         data_url = render_pages([path])[0]
+        thumb_url = render_thumbnail(path)
         post(api, token, {
             'action': 'saveSketch',
             'flightKey': key,
             'taskNo': task_no,
             'imageData': data_url,
+            'thumbData': thumb_url,
         })
-        print('✅ スケッチを保存しました: Task %s（%d KB）' % (task_no, len(data_url) // 1024))
+        print('✅ スケッチを保存しました: Task %s（本体 %d KB / プレビュー %d KB）'
+              % (task_no, len(data_url) // 1024, len(thumb_url) // 1024))
 
     if not pages and not sketches:
         print('原本・スケッチの指定が無いので、ここまでで完了です。')
