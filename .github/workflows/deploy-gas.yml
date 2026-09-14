@@ -42,8 +42,12 @@ jobs:
         with:
           node-version: '20'
 
+      # clasp のバージョンは ~/.clasprc.json を作った clasp login 側と揃える必要がある
+      # （メジャーバージョンをまたぐと ~/.clasprc.json の形式が変わり、
+      #  「Cannot read properties of undefined (reading 'access_token')」で落ちる）。
+      # ローカルで `clasp --version` を確認し、変わったらここも合わせて更新すること。
       - name: Install clasp
-        run: npm install -g @google/clasp@2
+        run: npm install -g @google/clasp@3.4.1
 
       - name: Write clasp credentials
         env:
