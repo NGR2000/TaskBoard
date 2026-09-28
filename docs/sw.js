@@ -1,13 +1,20 @@
 /* TaskBoard Service Worker
  *
  * アプリ本体とルール/辞書データを端末にキャッシュし、圏外でも起動できるようにする。
- * GAS API（別オリジン）へのリクエストは一切キャッシュせず、そのまま通す。
+ * Supabase のデータ API（/rest/v1）はキャッシュせず、そのまま通す。
  * アプリ側がタスクデータを localStorage に保持しているので、
  * 通信が失敗しても最後に同期した内容が表示される。
  *
+ * 原本・スケッチの画像（Storage の公開 URL）だけは端末に保存し、以後はネットワークに出ずに返す。
+ * 画像は差し替えると URL ごと変わる（中身が変わらない）ので、古い内容を返す心配は無い。
+ * このキャッシュはアプリの版と切り離してあり、アプリを更新しても消えない。
+ *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v3.9.2';
+var CACHE_VERSION = 'taskboard-v4.0.0';
+var IMAGE_CACHE = 'taskboard-images'; // app.js と同じ名前
+var IMAGE_PATH = '/storage/v1/object/public/taskboard/';
+var IMAGE_CACHE_MAX = 400; // これを超えたら古いものから消す（1大会で数十枚程度）
 var SHELL = [
   './',
   './index.html',
@@ -35,7 +42,7 @@ self.addEventListener('activate', function (event) {
     caches.keys()
       .then(function (keys) {
         return Promise.all(keys.map(function (k) {
-          return k === CACHE_VERSION ? null : caches.delete(k);
+          return k === CACHE_VERSION || k === IMAGE_CACHE ? null : caches.delete(k);
         }));
       })
       .then(function () { return self.clients.claim(); })
@@ -47,7 +54,11 @@ self.addEventListener('fetch', function (event) {
   if (req.method !== 'GET') return;
 
   var url = new URL(req.url);
-  // 別オリジン（GAS API など）はキャッシュに触れずネットワークへ
+  if (url.pathname.indexOf(IMAGE_PATH) === 0) {
+    event.respondWith(cachedImage(url.href));
+    return;
+  }
+  // それ以外の別オリジン（Supabase のデータ API など）はキャッシュに触れずネットワークへ
   if (url.origin !== self.location.origin) return;
 
   // stale-while-revalidate: まずキャッシュを返し、裏で更新する
@@ -66,3 +77,28 @@ self.addEventListener('fetch', function (event) {
     })
   );
 });
+
+/**
+ * <img> からの要求は no-cors で来るが、そのまま取ると中身の見えない応答になり、
+ * ブラウザによってはキャッシュの容量を1件数MBとして数えられてしまう。CORS で取り直して保存する。
+ */
+function cachedImage(href) {
+  return caches.open(IMAGE_CACHE).then(function (cache) {
+    return cache.match(href).then(function (hit) {
+      if (hit) return hit;
+      return fetch(href, { mode: 'cors', credentials: 'omit' }).then(function (res) {
+        if (res.ok) {
+          cache.put(href, res.clone()).then(function () { return trim(cache); });
+        }
+        return res;
+      });
+    });
+  });
+}
+
+function trim(cache) {
+  return cache.keys().then(function (keys) {
+    var extra = keys.length - IMAGE_CACHE_MAX;
+    for (var i = 0; i < extra; i++) cache.delete(keys[i]);
+  });
+}

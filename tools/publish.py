@@ -7,83 +7,31 @@
 
     python3 tools/publish.py --json flight.json --original tds.pdf
 
-API URL は既定で docs/config.js の apiUrl を読む。トークンは環境変数
-TASKBOARD_TOKEN から読む（--token でも渡せるが、シェル履歴に残るので非推奨）。
-トークンは Apps Script の「プロジェクトの設定 → スクリプト プロパティ」の
-TASKBOARD_API_TOKEN と同じ値を入れる。
+書き込み先は Supabase（接続先は docs/config.js）。ボット用メンバーでログインして書く:
+  TASKBOARD_BOT_EMAIL / TASKBOARD_BOT_PASSWORD（環境変数。チャットやリポジトリには置かない）
+共通部分は tools/taskboard_db.py。
 """
 
 import argparse
-import base64
 import json
 import os
-import re
 import sys
-import urllib.error
-import urllib.request
 
-CONFIG_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'docs', 'config.js')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from taskboard_db import Client, die, eq, original_path, sketch_paths, slugify, suggest_label  # noqa: E402
 
-# 原本ページの長辺。管理画面側の画像圧縮（index.html の compressImage / uploadPdf）と揃えてある。
+# 原本ページの長辺。管理画面側の画像圧縮（docs/admin/index.html の compressImage / uploadPdf）と揃えてある。
 # クルーの端末は原本を最大でも画面幅程度でしか表示しないため、これより大きくしても
 # 通信量が増えるだけで見え方は変わらない。実データで確認済み（デジタルPDF・スマホ写真の
 # どちらも 1200px/品質72 で問題なく判読できる）。
 PAGE_LONG_EDGE = 1200
 JPEG_QUALITY = 72
 
-# スケッチのプレビュー用サムネイル。タスクカードに直接埋め込んで表示するので、
+# スケッチのプレビュー用サムネイル。タスクカードに直接表示するので、
 # 通信量を増やさないようにフルサイズよりずっと小さく・粗くする
-# （タップした時に見るフル解像度は別途 --sketch の imageData 側で送られる）。
+# （タップした時に見るフル解像度は別ファイルで上げる）。
 THUMB_LONG_EDGE = 320
 THUMB_JPEG_QUALITY = 55
-
-
-def die(message):
-    print('エラー: ' + message, file=sys.stderr)
-    sys.exit(1)
-
-
-def api_url_from_config():
-    """docs/config.js の apiUrl を使う。引数で渡さなくて済むように。"""
-    try:
-        with open(CONFIG_JS, encoding='utf-8') as fh:
-            m = re.search(r'apiUrl\s*:\s*"([^"]+)"', fh.read())
-            return m.group(1) if m else ''
-    except OSError:
-        return ''
-
-
-def post(api, token, payload):
-    """GAS は POST に 302 を返して googleusercontent 側に本文を置く。
-    urllib は既定でこのリダイレクトを追うので、そのまま本文を読める。"""
-    body = dict(payload)
-    body['token'] = token
-    req = urllib.request.Request(
-        api,
-        data=json.dumps(body).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=180) as res:
-            text = res.read().decode('utf-8')
-    except urllib.error.HTTPError as e:
-        die('APIが %d を返しました: %s' % (e.code, e.read().decode('utf-8', 'replace')[:400]))
-    except urllib.error.URLError as e:
-        die('APIに接続できませんでした: %s' % e.reason)
-
-    try:
-        out = json.loads(text)
-    except ValueError:
-        die('APIの応答がJSONではありません。デプロイが最新か確認してください:\n' + text[:400])
-
-    if not out.get('ok'):
-        reason = out.get('error', '不明')
-        if reason == 'unauthorized':
-            die('トークンが一致しません。TASKBOARD_TOKEN を確認してください'
-                '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
-        die('APIがエラーを返しました: ' + str(reason))
-    return out
 
 
 def _open_pymupdf():
@@ -100,7 +48,7 @@ def _open_pymupdf():
 
 
 def render_pages(paths, long_edge=PAGE_LONG_EDGE, quality=JPEG_QUALITY):
-    """PDF はページごとに、画像はそのまま JPEG の data URL にして返す。
+    """PDF はページごとに、画像はそのまま JPEG のバイト列にして返す。
 
     PyMuPDF は PDF も画像も同じ Document として開けるので、
     ページ分割と縮小を 1 本の経路で扱える。long_edge/quality を変えれば
@@ -120,7 +68,7 @@ def render_pages(paths, long_edge=PAGE_LONG_EDGE, quality=JPEG_QUALITY):
             scale = min(2.0, long_edge / max(raw.width, raw.height))
             pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
             data = pix.tobytes('jpeg', jpg_quality=quality)
-            pages.append('data:image/jpeg;base64,' + base64.b64encode(data).decode('ascii'))
+            pages.append(data)
         doc.close()
     return pages
 
@@ -136,9 +84,8 @@ def main():
                     help='反映するフライトJSONのパス。省略すると原本の追加だけを行う（--key が必要）')
     ap.add_argument('--original', nargs='*', default=[], help='原本のPDF/画像（複数可・この順でページになる）')
     ap.add_argument('--key', default='', help='既存フライトを上書きする時のkey（省略すると新規）')
-    ap.add_argument('--label', default='', help='一覧に出す名前（省略するとJSONから自動生成）')
-    ap.add_argument('--api', default='', help='GASの /exec URL（省略時は docs/config.js）')
-    ap.add_argument('--token', default='', help='書き込みトークン（省略時は環境変数 TASKBOARD_TOKEN）')
+    ap.add_argument('--label', default='',
+                    help='一覧に出す名前。既存フライトの更新で省略すると今のラベルのまま。新規で省略するとJSONから自動生成')
     ap.add_argument('--keep-images', action='store_true',
                     help='既存の原本ページを消さずに後ろへ足す（既定は貼り直し）')
     ap.add_argument('--sketch', action='append', default=[], metavar='TASKNO:PATH',
@@ -148,15 +95,6 @@ def main():
     ap.add_argument('--dry-run', action='store_true', help='送信せず、何をするかだけ表示する')
     args = ap.parse_args()
 
-    api = args.api or os.environ.get('TASKBOARD_API_URL', '') or api_url_from_config()
-    if not api:
-        die('APIのURLが分かりません。--api で渡すか docs/config.js を設定してください。')
-
-    token = args.token or os.environ.get('TASKBOARD_TOKEN', '')
-    if not token and not args.dry_run:
-        die('トークンがありません。環境変数 TASKBOARD_TOKEN に設定してください'
-            '（Apps Script の プロジェクトの設定 → スクリプト プロパティ の TASKBOARD_API_TOKEN と同じ値です）。')
-
     # JSON を省略した時は「登録済みフライトに原本・スケッチだけ足す」動き。
     # 既に登録されている内容とラベルには一切触らない。
     images_only = not args.json
@@ -165,18 +103,16 @@ def main():
             die('--json を省略する場合は --key で対象フライトを指定してください。')
         if not args.original and not args.sketch:
             die('--json も --original も --sketch も無いので、やることがありません。')
-        raw, parsed = '', {}
+        parsed = {}
     else:
         try:
             with open(args.json, encoding='utf-8') as fh:
-                raw = fh.read()
-            parsed = json.loads(raw)
+                parsed = json.load(fh)
         except OSError as e:
             die('JSONを読めませんでした: %s' % e)
         except ValueError as e:
             die('JSONとして壊れています: %s' % e)
-
-        if not parsed.get('tasks'):
+        if not isinstance(parsed, dict) or not parsed.get('tasks'):
             die('tasks が入っていません。TaskBoard用のJSONか確認してください。')
 
     sketches = []
@@ -196,77 +132,90 @@ def main():
 
     pages = render_pages(args.original) if args.original else []
 
-    print('反映先: %s' % api)
+    db = Client()
+    # キーとラベルを決める。GAS 版と同じく、同じキーがあれば上書き（訂正の再登録）
+    new_label = args.label.strip()
+    key = args.key.strip() or slugify(new_label or suggest_label(parsed))
+    found = db.select('flights', 'select=key,label,images&key=' + eq(key))
+    existing = found[0] if found else None
+    if images_only and not existing:
+        die('フライトが見つかりません: ' + key)
+    label = new_label or (existing and existing['label']) or suggest_label(parsed)
+
+    print('反映先: %s' % db.url)
+    print('フライト: %s（%s）%s' % (key, label, '・既存を更新' if existing else '・新規'))
+    if existing and not new_label and not images_only:
+        print('  ラベルは今のまま使います（変えたい時は --label）')
     if images_only:
-        print('対象フライト: %s（原本・スケッチのみ差し替え・タスク内容は触りません）' % args.key)
+        print('原本・スケッチのみ差し替え（タスク内容とラベルは触りません）')
     else:
         print('タスク数: %d' % len(parsed['tasks']))
-    print('原本ページ数: %d%s' % (len(pages), '（既存ページは貼り直し）' if pages and not args.keep_images else ''))
+    print('原本ページ数: %d%s' % (len(pages), '（既存ページは貼り直し）' if pages and existing and not args.keep_images else ''))
     if sketches:
         print('スケッチ: %s' % ', '.join('Task %s (%s)' % (t, p) for t, p in sketches))
     if args.dry_run:
         print('--dry-run のため送信しませんでした。')
         return
 
-    if images_only:
-        key = args.key
-    else:
-        saved = post(api, token, {
-            'action': 'saveFlight',
-            'key': args.key,
-            'label': args.label,
-            'data': raw,
-        })
-        key = saved.get('key', args.key)
-        print('✅ 登録しました: %s（%s / %s タスク）' % (key, saved.get('label', ''), saved.get('taskCount', '?')))
+    db.login()
+    old_images = list(existing['images']) if existing else []
 
+    # 画像は先に上げてから、フライトの行を1回で書き換える。途中で失敗しても
+    # クルーの画面から原本が消えた状態にはならない（古い画像は最後に消す）。
+    images = old_images
     if pages:
-        if not args.keep_images:
-            cleared = post(api, token, {'action': 'clearImages', 'key': key})
-            if cleared.get('deleted'):
-                print('既存の原本 %d ページを消しました。' % cleared['deleted'])
-            start = 0
-        else:
-            state = post(api, token, {'action': 'state'})
-            current = [f for f in state.get('flights', []) if f.get('key') == key]
-            start = current[0].get('imagePages', 0) if current else 0
+        kept = old_images if args.keep_images else []
+        uploaded = []
+        for i, data in enumerate(pages, start=1):
+            uploaded.append(db.upload(original_path(key, len(kept) + i), data))
+            print('✅ 原本 %d/%d ページ目を上げました（%d KB）' % (i, len(pages), len(data) // 1024))
+        images = kept + uploaded
 
-        for i, data_url in enumerate(pages, start=1):
-            post(api, token, {
-                'action': 'saveImage',
-                'key': key,
-                'page': start + i,
-                'imageData': data_url,
-            })
-            print('✅ 原本 %d/%d ページ目を保存しました（%d KB）' % (i, len(pages), len(data_url) // 1024))
+    if images_only:
+        if pages:
+            db.update('flights', 'key=' + eq(key), {'images': images})
+    else:
+        row = {
+            'key': key,
+            'label': label,
+            'date': str((parsed.get('basicInfo') or {}).get('date') or ''),
+            'data': parsed,
+            'images': images,
+        }
+        if existing:
+            db.update('flights', 'key=' + eq(key), row)
+        else:
+            db.insert('flights', row)
+        print('✅ 登録しました: %s（%s / %d タスク）' % (key, label, len(parsed['tasks'])))
+
+    if pages and not args.keep_images:
+        stale = [p for p in old_images if p not in images]
+        db.remove(stale)
+        if stale:
+            print('古い原本 %d ページを消しました。' % len(stale))
 
     for task_no, path in sketches:
-        data_url = render_pages([path])[0]
-        thumb_url = render_thumbnail(path)
-        post(api, token, {
-            'action': 'saveSketch',
-            'flightKey': key,
-            'taskNo': task_no,
-            'imageData': data_url,
-            'thumbData': thumb_url,
-        })
+        main_bytes = render_pages([path])[0]
+        thumb_bytes = render_thumbnail(path)
+        main_path, thumb_path = sketch_paths(key, task_no)
+        db.upload(main_path, main_bytes)
+        db.upload(thumb_path, thumb_bytes)
+        prev = db.select('sketches', 'select=path,thumb_path&flight_key=%s&task_no=%s' % (eq(key), eq(task_no)))
+        db.insert('sketches', {'flight_key': key, 'task_no': task_no, 'path': main_path, 'thumb_path': thumb_path},
+                  upsert=True)
+        if prev:
+            db.remove([prev[0]['path'], prev[0]['thumb_path']])
         print('✅ スケッチを保存しました: Task %s（本体 %d KB / プレビュー %d KB）'
-              % (task_no, len(data_url) // 1024, len(thumb_url) // 1024))
+              % (task_no, len(main_bytes) // 1024, len(thumb_bytes) // 1024))
 
-    if not pages and not sketches:
-        print('原本・スケッチの指定が無いので、ここまでで完了です。')
-        return
-
-    state = post(api, token, {'action': 'state'})
-    final = [f for f in state.get('flights', []) if f.get('key') == key]
+    final = db.select('flight_list', 'select=label,task_count,images&key=' + eq(key))
     if final:
-        print('反映後の状態: %s / %s タスク / 原本 %s ページ'
-              % (final[0].get('label'), final[0].get('taskCount'), final[0].get('imagePages')))
+        print('反映後の状態: %s / %s タスク / 原本 %d ページ'
+              % (final[0]['label'], final[0]['task_count'], len(final[0]['images'])))
     if sketches:
-        have = {s.get('taskNo') for s in state.get('sketches', []) if s.get('flightKey') == key}
+        have = {s['task_no'] for s in db.select('sketches', 'select=task_no&flight_key=' + eq(key))}
         for task_no, _ in sketches:
-            mark = '✅' if task_no in have else '⚠️ 反映確認できず'
-            print('  スケッチ Task %s: %s' % (task_no, mark))
+            print('  スケッチ Task %s: %s' % (task_no, '✅' if task_no in have else '⚠️ 反映確認できず'))
     print('完了です。クルーはアプリで「↻」を押すと反映されます。')
 
 
