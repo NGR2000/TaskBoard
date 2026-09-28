@@ -5,7 +5,7 @@ description: Converts a hot-air-balloon competition "Task Data Sheet" — a phot
 
 # TaskBoard task-sheet conversion
 
-Turn a "Task Data Sheet" into the JSON this project's crew app understands. The output is either pasted into the GAS admin panel by the user, or fed to `taskboard-publish`.
+Turn a "Task Data Sheet" into the JSON this project's crew app understands. The output is either pasted into the admin page (`docs/admin/`) by the user, or fed to `taskboard-publish`.
 
 `README.md` at the repo root ("JSON スキーマ" and "Claude に渡す変換プロンプト") is the authoritative schema. Skim it fresh each time — it may have evolved since this skill was written. Existing schemaVersion-2 fixtures under `JSON/` (`kro2025_flight3.json`, `watarase_practice_20260808_flight1.json`) show the house style on real data. Ignore the old flat-format files (`Saku Balloon Festival *.JSON`, `*.txt`) — they are schema v1 and are not the pattern to follow.
 

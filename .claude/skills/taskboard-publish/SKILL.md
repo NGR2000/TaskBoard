@@ -12,17 +12,19 @@ Scripts bundled here (paths relative to this skill directory):
 | Script | Does |
 |---|---|
 | `scripts/taskboard_state.py list` | Live flights (key, label, date, task count, pages, archived) and which flight/task pairs have sketches |
-| `scripts/taskboard_state.py archive <key>` / `unarchive <key>` | Archive a flight via the write API (data stays; crew sees it under 📦) |
+| `scripts/taskboard_state.py archive <key>` / `unarchive <key>` | Archive a flight (data stays; crew sees it under 📦) |
+| `scripts/taskboard_state.py show <key> [out.json]` | The registered JSON as it is live now — start every amendment from this |
+| `scripts/taskboard_state.py history <key>` | Who changed what and when (flight and its sketches) |
 | `scripts/preview.js <flight.json> <prefix>` | Loads the JSON into the real crew app and screenshots the basic-info card and every task card |
 
-`tools/publish.py` (repo root) does the registering and original-page upload.
+`tools/publish.py` (repo root) does the registering and original-page upload. Everything talks to Supabase through `tools/taskboard_db.py`.
 
 ## What has to be in place
 
-- `TASKBOARD_TOKEN` in the environment. If missing, stop and ask the user to set it in their Claude Code environment settings (it is the `TASKBOARD_API_TOKEN` script property). Never ask for it in chat.
-- A GAS deployment that includes `doPost`. Non-JSON responses or "unknown action" mean the deployed version is older than the repo. `taskboard_state.py list` prints a warning if the response still carries the pre-sketch-fix `sketchTaskNos` field — that also means the deployment is stale.
+- `docs/config.js` has `supabaseUrl` and `supabaseAnonKey` (public values; reads need nothing else).
+- `TASKBOARD_BOT_EMAIL` / `TASKBOARD_BOT_PASSWORD` in the environment for anything that writes. This is the bot member's login; its email must be in the `admins` table. If missing, stop and ask the user to set them in their Claude Code environment settings. Never ask for them in chat.
 
-Deploying GAS is the user's job (`git pull` → `clasp push` → "デプロイを管理 → 新バージョン"). The single most common failure is running `clasp push` from a checkout that was never pulled; when a redeploy "didn't work", check that first.
+"権限がありません" / "更新できませんでした … admins 表" means the bot isn't in `admins` — the user adds it in the Supabase dashboard (README.md「メンバーの追加」). Schema changes are applied by the user pasting `supabase/schema.sql` into the SQL Editor; there is no deploy step for the backend.
 
 ## Step 1 — Fetch and convert
 
@@ -54,7 +56,7 @@ Before sending anything:
 python3 <skill>/scripts/taskboard_state.py list
 ```
 
-Always pass explicit `--key` and `--label`. Without them the key is derived from the JSON's Flight/Tasks fields (`flight-1-1-2-3-4-5`) and silently overwrites any earlier flight that derived the same key. Key style in use: `saku2026-flight1`, `slovak2026-flight1`, `worlds2026-training-t3`, or the same key as an existing flight when the sheet is a correction of it. Labels are what the crew sees on the chip: `Training Flight T3`, `2022年スロベニア初日PM`, `Saku 2026 Flight1 (#1-#5)`.
+Always pass an explicit `--key`, and `--label` for a new flight. Without a key it is derived from the label or the JSON's Flight/Tasks fields (`flight-1-1-2-3-4-5`) and silently overwrites any earlier flight that derived the same key. On an update, omitting `--label` keeps the existing label. Key style in use: `saku2026-flight1`, `slovak2026-flight1`, `worlds2026-training-t3`, or the same key as an existing flight when the sheet is a correction of it. Labels are what the crew sees on the chip: `Training Flight T3`, `2022年スロベニア初日PM`, `Saku 2026 Flight1 (#1-#5)`.
 
 If the sheet might be a correction to something already registered, say which existing key you would overwrite and confirm.
 
@@ -66,14 +68,14 @@ python3 tools/publish.py --json /abs/flight.json --original /abs/sheet.pdf --key
 
 - `--original` is the printed sheet (PDF pages or the photo of the sheet) — not hand-drawn sketches; those go through Step 6.
 - Several flights → one command per flight, in a loop, then one `taskboard_state.py list` at the end.
-- Original only, for a flight already registered: drop `--json`, keep `--key`. Re-saving with `--json` and no `--label` would regenerate the label.
+- Original only, for a flight already registered: drop `--json`, keep `--key`. Re-saving with `--json` and no `--label` keeps the current label.
 - `--dry-run` reports what would happen without sending; use it when anything about the target is uncertain.
 
 Then verify with `taskboard_state.py list` and report what actually landed (label, task count, page count). If the page count doesn't match what you uploaded, say so instead of declaring success.
 
 ## Step 5 — Test data and archiving
 
-A sheet registered only to test something should not stay in the crew's flight bar. Ask "アーカイブ／削除／このまま？" and, for archive, run `taskboard_state.py archive <key>`. Archiving keeps data and sketches; restoring is `unarchive`. Deleting is only in the admin panel and is irreversible.
+A sheet registered only to test something should not stay in the crew's flight bar. Ask "アーカイブ／削除／このまま？" and, for archive, run `taskboard_state.py archive <key>`. Archiving keeps data and sketches; restoring is `unarchive`. Deleting is only in the admin page (`docs/admin/`) and removes the images for good (the row itself stays in the change history).
 
 ## Step 6 — Sketches and diagrams
 
@@ -85,16 +87,15 @@ Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the
    page = pymupdf.open(pdf)[0]
    page.get_pixmap(matrix=pymupdf.Matrix(4, 4), clip=pymupdf.Rect(x0, y0, x1, y1)).save(out)  # clip in PDF points = pixels/2 of a 2x render
    ```
-2. Upload it directly with `tools/publish.py --key <flightKey> --sketch <taskNo>:<path>` (repeatable for several sketches in one flight: `--sketch 20:task20.png --sketch 22:task22.png`). This goes through the write API (`action: saveSketch`), same token as everything else — no admin-panel step needed. The command reports back whether each task number now shows up in the sketches list.
-3. If the API comes back with `unknown action: saveSketch` (or any non-JSON response), the deployed GAS is older than the repo (this action was added later — see git history for `コード.js`'s `doPost`). Fall back to the manual handoff: `SendUserFile` the image with "管理画面の『5. タスク別スケッチ』→ <flight label> → Task <no> に追加", then after the user confirms, verify with `taskboard_state.py list`. Tell the user the deployment is stale either way, since other newer write-API behavior may be missing too.
-4. Either path, finish with `taskboard_state.py list` — the sketch line must show `<flightKey> / Task <no>`.
+2. Upload it directly with `tools/publish.py --key <flightKey> --sketch <taskNo>:<path>` (repeatable for several sketches in one flight: `--sketch 20:task20.png --sketch 22:task22.png`). It makes the full image and the preview thumbnail, replaces any earlier sketch for that task, and reports whether each task number now shows up.
+3. Finish with `taskboard_state.py list` — the sketch line must show `<flightKey> / Task <no>`.
 
 Task numbers restart every competition, so the flight key in that line is what proves the sketch landed on the right task and not on another competition's Task 2.
 
 ## When something fails partway
 
-Registration and page upload are separate calls; a failure can leave the flight registered with no pages. Re-running the same command replaces the pages from scratch. Don't retry in a loop — report which page failed and why. A token mismatch ("トークンが一致しません") usually means the script property was changed; the user fixes it in Apps Script, nothing to do here.
+Pages are uploaded first and the flight row is written once at the end, so a failure partway leaves the crew's view as it was (at worst some unused image files stay behind in Storage). Re-running the same command is safe. Don't retry in a loop — report what failed and why. A login failure means the bot credentials in the environment are wrong; a permission error means the bot isn't in `admins` — both are the user's to fix.
 
 ## What this skill doesn't do
 
-It doesn't deploy GAS — if the deployed version doesn't yet have `saveSketch` (see Step 6), that's the user's step. It also doesn't decide on its own to archive or delete anything.
+It doesn't change the database schema or member list — those are the user's steps in the Supabase dashboard. It also doesn't decide on its own to archive or delete anything.

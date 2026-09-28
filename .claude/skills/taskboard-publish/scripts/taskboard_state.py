@@ -5,11 +5,13 @@
   python3 taskboard_state.py archive <key>    フライトをアーカイブ（データは残る）
   python3 taskboard_state.py unarchive <key>  アーカイブを戻す
   python3 taskboard_state.py history <key>    そのフライト（とスケッチ）の変更履歴
+  python3 taskboard_state.py show <key> [out.json]  登録済みの JSON を表示（ファイルに保存）
 
-接続先は docs/config.js（tools/publish.py と同じ）。list はログイン不要、
+接続先は docs/config.js（tools/publish.py と同じ）。list と show はログイン不要、
 それ以外は TASKBOARD_BOT_EMAIL / TASKBOARD_BOT_PASSWORD でログインする。
 """
 import datetime
+import json
 import os
 import sys
 import urllib.parse
@@ -37,6 +39,19 @@ def cmd_list(db):
             f['key'], f['label'], f.get('date', ''), f.get('task_count'), len(f.get('images') or []), flag))
     sketches = db.select('sketches', 'select=flight_key,task_no&order=flight_key.asc,task_no.asc')
     print('スケッチ: ' + (', '.join('%s / Task %s' % (s['flight_key'], s['task_no']) for s in sketches) or 'なし'))
+
+
+def cmd_show(db, key, out):
+    rows = db.select('flights', 'select=label,data&key=' + eq(key))
+    if not rows:
+        sys.exit('フライトが見つかりません: ' + key)
+    text = json.dumps(rows[0]['data'], ensure_ascii=False, indent=2)
+    if out:
+        with open(out, 'w', encoding='utf-8') as fh:
+            fh.write(text + '\n')
+        print('%s（%s）を %s に保存しました' % (key, rows[0]['label'], out))
+    else:
+        print(text)
 
 
 def cmd_archive(db, key, archived):
@@ -68,7 +83,7 @@ def cmd_history(db, key):
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ('list', 'archive', 'unarchive', 'history'):
+    if not args or args[0] not in ('list', 'archive', 'unarchive', 'history', 'show'):
         sys.exit(__doc__)
     db = Client()
     if args[0] == 'list':
@@ -78,6 +93,8 @@ def main():
         sys.exit('key を指定してください')
     if args[0] == 'history':
         cmd_history(db, args[1])
+    elif args[0] == 'show':
+        cmd_show(db, args[1], args[2] if len(args) > 2 else '')
     else:
         cmd_archive(db, args[1], args[0] == 'archive')
 
