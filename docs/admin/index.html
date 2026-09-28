@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>TaskBoard 管理</title>
+<link rel="icon" href="../favicon-32.png">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Sans','Yu Gothic',sans-serif; background:#fff; color:#1a1a1a; line-height:1.55; }
+.header { background:#1a1a1a; color:#fff; padding:13px 15px; position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.header b { font-size:16px; }
+.header small { display:block; font-size:11px; color:#b9b9b9; }
+.header .who { font-size:11px; color:#b9b9b9; text-align:right; word-break:break-all; }
+.header .who button { margin-top:4px; background:#3d3d3d; color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:12px; cursor:pointer; }
+.wrap { padding:15px; max-width:640px; margin:0 auto; }
+h2 { font-size:15px; margin:26px 0 8px; padding-bottom:5px; border-bottom:2px solid #1a1a1a; }
+h2:first-of-type { margin-top:6px; }
+.btn { display:block; width:100%; padding:13px 18px; margin-bottom:9px; border:none; border-radius:10px; font-size:15px; font-weight:bold; cursor:pointer; }
+.btn:disabled { opacity:.5; cursor:default; }
+.btn-primary { background:#1a1a1a; color:#fff; }
+.btn-secondary { background:#ececec; color:#1a1a1a; }
+.btn-inline { display:inline-block; width:auto; margin:0; padding:7px 12px; font-size:13px; border-radius:7px; border:none; cursor:pointer; }
+.btn-small { background:#3d3d3d; color:#fff; border:none; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; white-space:nowrap; }
+.btn-danger-outline { background:none; border:1px solid #cc0000; color:#cc0000; padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; white-space:nowrap; }
+.btn-link { background:none; border:none; color:#0066cc; font-size:13px; cursor:pointer; padding:4px 0; text-decoration:underline; }
+textarea { width:100%; min-height:150px; padding:11px; border-radius:9px; border:2px solid #ccc; font-size:12px; font-family:ui-monospace,Menlo,monospace; resize:vertical; outline:none; }
+textarea:focus, input:focus { border-color:#1a1a1a; }
+input[type=text], input[type=email], input[type=password] { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:16px; outline:none; }
+label.field { display:block; font-size:12px; font-weight:bold; color:#555; margin:10px 0 4px; }
+.share { background:#f6f6f6; border-radius:10px; padding:12px; font-size:12px; word-break:break-all; }
+.share code { display:block; background:#fff; border:1px solid #e0e0e0; border-radius:6px; padding:8px; margin:6px 0; font-size:11px; }
+.hint { font-size:12px; color:#6b6b6b; line-height:1.75; margin-top:6px; }
+.row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid #eee; font-size:14px; }
+.row:last-child { border-bottom:none; }
+.msg { padding:10px 12px; border-radius:9px; font-size:13px; margin-top:8px; white-space:pre-wrap; }
+.msg.ok { background:#eefaf0; color:#006633; }
+.msg.err { background:#fff1f1; color:#cc0000; }
+.msg.info { background:#eef3ff; color:#1a3a7a; }
+.status { font-size:13px; color:#6b6b6b; }
+.flight-card { border:2px solid #1a1a1a; border-radius:10px; padding:11px 13px; margin-bottom:9px; }
+.flight-card.editing { border-color:#0066cc; background:#f2f7ff; }
+.flight-card.archived { border-color:#ccc; background:#fafafa; }
+.flight-card.archived .flight-label { color:#888; font-weight:normal; }
+.badge-archived { font-size:11px; background:#ececec; color:#666; border-radius:5px; padding:1px 6px; margin-left:6px; white-space:nowrap; }
+.flight-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.flight-label { font-size:15px; font-weight:bold; }
+.flight-sub { font-size:12px; color:#777; margin-top:2px; }
+.flight-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.flight-empty { text-align:center; padding:30px 10px; color:#999; font-size:13px; }
+.history { margin-top:8px; border-top:1px dashed #ccc; padding-top:6px; font-size:12px; }
+.history-row { display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px solid #f0f0f0; }
+.sketch-group { margin-bottom:14px; }
+.sketch-group-title { font-size:13px; font-weight:bold; color:#444; padding-bottom:4px; margin-bottom:2px; border-bottom:1px solid #ddd; }
+.pages { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.pages img { height:90px; border:1px solid #ddd; border-radius:4px; }
+details > summary { cursor:pointer; font-size:13px; color:#555; padding:6px 0; }
+select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc; font-size:14px; background:#fff; }
+.hidden { display:none !important; }
+</style>
+<script src="../config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+<div class="header">
+  <div><b>🎈 TaskBoard 管理</b><small>入力・管理用。閲覧はクルー用アプリで行います</small></div>
+  <div class="who hidden" id="who"><span id="whoEmail"></span><br><button onclick="logout()">ログアウト</button></div>
+</div>
+
+<!-- ログイン -->
+<div class="wrap hidden" id="loginScreen">
+  <h2>ログイン</h2>
+  <div class="hint" style="margin-top:0">管理者として登録されたメンバーだけが使えます。招待メールからパスワードを設定してください。</div>
+  <label class="field">メールアドレス</label>
+  <input type="email" id="loginEmail" autocomplete="username">
+  <label class="field">パスワード</label>
+  <input type="password" id="loginPass" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+  <button class="btn btn-primary" style="margin-top:12px" onclick="login()">ログイン</button>
+  <button class="btn-link" onclick="forgot()">パスワードを忘れた</button>
+  <div id="loginMsg"></div>
+</div>
+
+<!-- パスワード設定（招待・再設定のリンクから来た時） -->
+<div class="wrap hidden" id="passwordScreen">
+  <h2>パスワードを設定</h2>
+  <div class="hint" style="margin-top:0">8文字以上で設定してください。次回からはメールアドレスとこのパスワードでログインします。</div>
+  <label class="field">新しいパスワード</label>
+  <input type="password" id="newPass" autocomplete="new-password" onkeydown="if(event.key==='Enter')setPassword()">
+  <button class="btn btn-primary" style="margin-top:12px" onclick="setPassword()">設定する</button>
+  <div id="passMsg"></div>
+</div>
+
+<!-- 管理者ではない -->
+<div class="wrap hidden" id="notAdminScreen">
+  <h2>管理者として登録されていません</h2>
+  <div class="msg err" id="notAdminMsg"></div>
+  <div class="hint">ログインはできていますが、このアカウントは <b>admins</b> 表に入っていないため操作できません。
+    Supabase の持ち主に、このメールアドレスを admins に追加してもらってください（README.md「メンバーの追加」）。</div>
+</div>
+
+<div class="wrap hidden" id="mainScreen">
+
+  <h2>1. クルーに配るリンク</h2>
+  <div class="share">
+    このURLをLINEで共有してください。フライトはアプリ内で切り替えるので、配り直す必要はありません。
+    <code id="shareUrl">-</code>
+    <button class="btn-small" onclick="copyShare()">URLをコピー</button>
+    <a id="openApp" href="../" target="_blank" style="margin-left:8px;font-size:13px">アプリを開く</a>
+  </div>
+
+  <h2>2. フライトを登録する</h2>
+  <div class="hint" style="margin-top:0">
+    Claudeにタスクシート画像を送り「<b>TaskBoard用JSONに変換して</b>」と依頼 → 出てきたJSONを貼り付け。<br>
+    既存フライトを選んで登録すると、訂正として上書きされます。
+  </div>
+  <label class="field">対象フライト</label>
+  <select id="flightSelect" onchange="onSelectFlight()">
+    <option value="">＋ 新しいフライトとして登録</option>
+  </select>
+  <label class="field" id="labelFieldLabel">ラベル（空なら自動で付けます。例: Flight 3 (#8-#12)）</label>
+  <input type="text" id="labelInput" placeholder="Flight 3 (#8-#12)">
+  <label class="field">JSON</label>
+  <textarea id="jsonInput" placeholder='{"basicInfo":{...},"tasks":[...]}'></textarea>
+  <button class="btn btn-primary" style="margin-top:9px" id="saveBtn" onclick="saveJson()">登録して全クルーに反映</button>
+  <div id="jsonMsg"></div>
+
+  <h2>3. 登録済みフライト</h2>
+  <div id="flightList"><div class="status">確認中…</div></div>
+
+  <h2>4. 原本タスクシート画像</h2>
+  <div class="hint" style="margin-top:0">「2.」で選んでいるフライトに紐づけて保存します。複数ページの時は順番通りに「+ ページを追加」で足してください。PDFを選ぶと、全ページをその順番のまま追加します。</div>
+  <div class="row">
+    <span id="imageStatus" class="status">確認中…</span>
+    <div style="display:flex;gap:6px">
+      <input type="file" id="imageInput" accept="image/*,application/pdf" style="display:none" onchange="uploadImage(this)">
+      <button class="btn-small" onclick="document.getElementById('imageInput').click()">+ ページを追加</button>
+      <button class="btn-danger-outline" id="deleteImageBtn" onclick="deleteLastImage()" style="display:none">最後のページを削除</button>
+    </div>
+  </div>
+  <div class="pages" id="pagePreview"></div>
+  <div id="imageMsg"></div>
+
+  <h2>5. タスク別スケッチ</h2>
+  <div class="hint" style="margin-top:0">タスク番号はフライトごとに振り直されるため、フライトごとに分けて表示します。</div>
+  <div id="sketchList"><div class="status">確認中…</div></div>
+  <div id="sketchMsg"></div>
+
+  <h2>6. 管理メンバー</h2>
+  <div id="memberList"><div class="status">確認中…</div></div>
+  <div class="hint">メンバーの追加・削除は Supabase のダッシュボードで行います（README.md「メンバーの追加」）。</div>
+
+  <div style="height:40px"></div>
+</div>
+
+<script>
+var CFG = window.TASKBOARD_CONFIG || {};
+var BUCKET = 'taskboard';
+// 原本・スケッチの圧縮。tools/publish.py（PAGE_LONG_EDGE / THUMB_LONG_EDGE）と揃えてある
+var PAGE_LONG_EDGE = 1200, PAGE_QUALITY = 0.72;
+var THUMB_LONG_EDGE = 320, THUMB_QUALITY = 0.55;
+
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// 招待・パスワード再設定のリンクから来た時は、URL の #...type=invite|recovery を
+// supabase-js が読み取って消す前に覚えておく（その後パスワード設定画面を出す）
+var arrivedFor = (/[#&]type=(invite|recovery)/.exec(location.hash) || [])[1] || '';
+
+var sb = (window.supabase && CFG.supabaseUrl && CFG.supabaseAnonKey)
+  ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey)
+  : null;
+
+var flights = [];      // flights の全行（data 含む）。登録順
+var sketches = [];     // sketches の全行
+var lastChange = {};   // row_key -> { at, actor }
+var editingKey = '';   // '' = 新規登録
+var openHistory = '';  // 履歴を開いているフライト
+
+// ---------------------------------------------------------------------
+// 小物
+// ---------------------------------------------------------------------
+function el(id) { return document.getElementById(id); }
+function show(id) {
+  ['loginScreen', 'passwordScreen', 'notAdminScreen', 'mainScreen'].forEach(function (s) {
+    el(s).classList.toggle('hidden', s !== id);
+  });
+}
+function msg(id, text, kind) {
+  el(id).innerHTML = text ? '<div class="msg ' + (kind || 'info') + '">' + text + '</div>' : '';
+}
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function fmt(iso) { return iso ? new Date(iso).toLocaleString('ja-JP') : '-'; }
+function who(email) { return email ? email.split('@')[0] : 'SQL Editor'; }
+
+/** supabase-js の {data, error} を「成功なら data、失敗なら例外」にする */
+function must(res) {
+  if (res.error) throw new Error(res.error.message || String(res.error));
+  return res.data;
+}
+
+/** RLS で弾かれた更新は 0 行で返ってくるので、黙って成功扱いにしない */
+function mustRows(res) {
+  var rows = must(res);
+  if (!rows || !rows.length) throw new Error('更新できませんでした（権限が無いか、対象がありません）');
+  return rows;
+}
+
+/** Storage のパスに使える形にする。tools/taskboard_db.py の safe_segment と同じ規則 */
+function safeSegment(text) {
+  text = String(text);
+  if (/^[A-Za-z0-9_.-]+$/.test(text)) return text;
+  var bytes = new TextEncoder().encode(text), hex = '';
+  for (var i = 0; i < bytes.length; i++) hex += ('0' + bytes[i].toString(16)).slice(-2);
+  return 'x-' + hex;
+}
+function version() {
+  var b = new Uint8Array(4); crypto.getRandomValues(b);
+  return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+}
+function publicUrl(path) { return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; }
+
+/** tools/taskboard_db.py の slugify と同じ規則でキーを作る */
+function slugify(label) {
+  var s = String(label || '').toLowerCase().replace(/[^a-z0-9぀-ヿ一-鿿]+/g, '-').replace(/^-+|-+$/g, '');
+  return s || 'flight-' + version();
+}
+function suggestLabel(parsed) {
+  var fields = (parsed.basicInfo && parsed.basicInfo.fields) || [];
+  var flightNo = '', tasks = '';
+  fields.forEach(function (f) {
+    var label = String(f.label || '').toLowerCase();
+    if (label === 'flight' || label === 'flight no') flightNo = f.value;
+    if (label === 'tasks') tasks = f.value;
+  });
+  if (flightNo) return 'Flight ' + flightNo + (tasks ? ' (' + tasks + ')' : '');
+  return 'Flight ' + new Date().toLocaleString('ja-JP');
+}
+
+function shareUrl() { return new URL('../', location.href).href; }
+function copyShare() {
+  var url = shareUrl();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function () { alert('コピーしました'); },
+      function () { prompt('コピーしてください', url); });
+  } else {
+    prompt('コピーしてください', url);
+  }
+}
+
+// ---------------------------------------------------------------------
+// ログイン
+// ---------------------------------------------------------------------
+function notReady() {
+  if (sb) return false;
+  msg('loginMsg', '接続の準備ができていません。通信状態を確認して、ページを開き直してください。', 'err');
+  return true;
+}
+
+function login() {
+  if (notReady()) return;
+  var email = el('loginEmail').value.trim(), password = el('loginPass').value;
+  if (!email || !password) return;
+  msg('loginMsg', 'ログイン中…', 'info');
+  sb.auth.signInWithPassword({ email: email, password: password }).then(function (res) {
+    if (res.error) { msg('loginMsg', 'ログインできませんでした: ' + esc(res.error.message), 'err'); return; }
+    msg('loginMsg', '');
+    enter(res.data.session);
+  });
+}
+
+function forgot() {
+  if (notReady()) return;
+  var email = el('loginEmail').value.trim();
+  if (!email) { msg('loginMsg', '上にメールアドレスを入れてから押してください', 'err'); return; }
+  sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] }).then(function (res) {
+    msg('loginMsg', res.error ? '送れませんでした: ' + esc(res.error.message)
+      : 'パスワード再設定のメールを送りました。メール内のリンクから設定してください。', res.error ? 'err' : 'ok');
+  });
+}
+
+function setPassword() {
+  var password = el('newPass').value;
+  if (password.length < 8) { msg('passMsg', '8文字以上にしてください', 'err'); return; }
+  sb.auth.updateUser({ password: password }).then(function (res) {
+    if (res.error) { msg('passMsg', '設定できませんでした: ' + esc(res.error.message), 'err'); return; }
+    arrivedFor = '';
+    history.replaceState(null, '', location.pathname);
+    sb.auth.getSession().then(function (r) { enter(r.data.session); });
+  });
+}
+
+function logout() {
+  sb.auth.signOut().then(function () { location.reload(); });
+}
+
+function enter(session) {
+  if (!session) { show('loginScreen'); el('who').classList.add('hidden'); return; }
+  el('whoEmail').textContent = session.user.email;
+  el('who').classList.remove('hidden');
+  if (arrivedFor) { show('passwordScreen'); return; }
+  sb.rpc('is_admin').then(function (res) {
+    if (res.error || res.data !== true) {
+      el('notAdminMsg').textContent = session.user.email;
+      show('notAdminScreen');
+      return;
+    }
+    show('mainScreen');
+    el('shareUrl').textContent = shareUrl();
+    refresh();
+  });
+}
+
+// ---------------------------------------------------------------------
+// 状態の読み込みと描画
+// ---------------------------------------------------------------------
+function refresh() {
+  return Promise.all([
+    sb.from('flights').select('*').order('created_at').order('key'),
+    sb.from('sketches').select('*'),
+    sb.from('history').select('at,actor,row_key,table_name').order('at', { ascending: false }).limit(500),
+    sb.from('admins').select('email,note,added_at').order('added_at')
+  ]).then(function (res) {
+    flights = must(res[0]);
+    sketches = must(res[1]);
+    lastChange = {};
+    must(res[2]).forEach(function (h) {
+      var key = h.table_name === 'sketches' ? h.row_key.split('/')[0] : h.row_key;
+      if (!lastChange[key]) lastChange[key] = h;
+    });
+    renderMembers(must(res[3]));
+    render();
+  }).catch(function (e) { msg('jsonMsg', '状態の取得に失敗: ' + esc(e.message), 'err'); });
+}
+
+function currentFlight() {
+  return flights.filter(function (f) { return f.key === editingKey; })[0] || null;
+}
+
+function render() {
+  var sel = el('flightSelect');
+  sel.innerHTML = '<option value="">＋ 新しいフライトとして登録</option>' + flights.map(function (f) {
+    return '<option value="' + esc(f.key) + '">' + esc(f.label) + (f.archived_at ? '（アーカイブ済み）' : '') + '</option>';
+  }).join('');
+  if (!currentFlight()) editingKey = '';
+  sel.value = editingKey;
+  el('labelFieldLabel').textContent = editingKey
+    ? 'ラベル（空なら今のラベルのまま）'
+    : 'ラベル（空なら自動で付けます。例: Flight 3 (#8-#12)）';
+  renderImageStatus();
+  renderFlights();
+  renderSketches();
+}
+
+function renderFlights() {
+  var list = el('flightList');
+  if (!flights.length) {
+    list.innerHTML = '<div class="flight-empty">まだフライトが登録されていません。上のフォームから登録してください。</div>';
+    return;
+  }
+  // 新しい登録が上。アーカイブ済みは後ろにまとめる
+  var newestFirst = flights.slice().reverse();
+  var ordered = newestFirst.filter(function (f) { return !f.archived_at; })
+    .concat(newestFirst.filter(function (f) { return !!f.archived_at; }));
+  list.innerHTML = ordered.map(function (f) {
+    var ch = lastChange[f.key];
+    var tasks = (f.data && f.data.tasks) || [];
+    return '<div class="flight-card' + (f.key === editingKey ? ' editing' : '') + (f.archived_at ? ' archived' : '') + '">' +
+      '<div class="flight-head">' +
+        '<div><div class="flight-label">' + esc(f.label) +
+          (f.archived_at ? '<span class="badge-archived">アーカイブ済み</span>' : '') + '</div>' +
+        '<div class="flight-sub">' + esc(f.date) + '　' + tasks.length + 'タスク　原本' + (f.images || []).length + 'ページ</div>' +
+        '<div class="flight-sub">最終更新: ' + esc(fmt(ch ? ch.at : f.updated_at)) + (ch ? '（' + esc(who(ch.actor)) + '）' : '') + '</div></div>' +
+        '<div class="flight-actions">' +
+          '<button class="btn-small" data-act="edit-flight" data-key="' + esc(f.key) + '">編集</button>' +
+          (f.archived_at
+            ? '<button class="btn-small" data-act="unarchive-flight" data-key="' + esc(f.key) + '">戻す</button>'
+            : '<button class="btn-secondary btn-inline" data-act="archive-flight" data-key="' + esc(f.key) + '">アーカイブ</button>') +
+          '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '">削除</button>' +
+          '<button class="btn-link" data-act="history" data-key="' + esc(f.key) + '">履歴</button>' +
+        '</div>' +
+      '</div>' +
+      (openHistory === f.key ? '<div class="history" id="history-' + esc(safeSegment(f.key)) + '">読み込み中…</div>' : '') +
+    '</div>';
+  }).join('');
+  if (openHistory) loadHistory(openHistory);
+}
+
+function renderImageStatus() {
+  var f = currentFlight();
+  var pages = f ? (f.images || []) : [];
+  el('imageStatus').textContent = !editingKey ? '（「2.」でフライトを選ぶと表示されます）'
+    : (pages.length ? '✅ ' + pages.length + 'ページ保存済み' : '未登録');
+  el('deleteImageBtn').style.display = pages.length ? '' : 'none';
+  el('pagePreview').innerHTML = pages.map(function (p, i) {
+    return '<a href="' + esc(publicUrl(p)) + '" target="_blank"><img src="' + esc(publicUrl(p)) + '" alt="' + (i + 1) + 'ページ目"></a>';
+  }).join('');
+}
+
+function taskList(f) {
+  return ((f.data && f.data.tasks) || []).map(function (t, i) {
+    return { taskNo: String(t.taskNo || t.TaskNo || (i + 1)), taskId: String(t.taskId || t.type || ''), name: String(t.name || t.typeName || '') };
+  });
+}
+
+function sketchGroup(f) {
+  var rows = taskList(f).map(function (t) {
+    var sk = sketches.filter(function (x) { return x.flight_key === f.key && x.task_no === t.taskNo; })[0];
+    var id = 'sk_' + safeSegment(f.key) + '_' + safeSegment(t.taskNo);
+    var btns = sk
+      ? '<a href="' + esc(publicUrl(sk.path)) + '" target="_blank" style="font-size:13px;margin-right:8px">見る</a>' +
+        '<button class="btn-danger-outline" data-act="delete-sketch" data-flightkey="' + esc(f.key) + '" data-taskno="' + esc(t.taskNo) + '">削除</button>'
+      : '<input type="file" id="' + esc(id) + '" accept="image/*" style="display:none" data-flightkey="' + esc(f.key) + '" data-taskno="' + esc(t.taskNo) + '" data-act="upload-sketch">' +
+        '<button class="btn-small" data-act="pick-sketch" data-target="' + esc(id) + '">追加</button>';
+    return '<div class="row"><span>' + (sk ? '✅' : '📂') + ' Task ' + esc(t.taskNo) +
+      ' <b>' + esc(t.taskId) + '</b> <span class="status">' + esc(t.name) + '</span></span><span>' + btns + '</span></div>';
+  }).join('');
+  return '<div class="sketch-group"><div class="sketch-group-title">' + esc(f.label) + '</div>' + rows + '</div>';
+}
+
+function renderSketches() {
+  var withTasks = flights.slice().reverse().filter(function (f) { return taskList(f).length; });
+  if (!withTasks.length) { el('sketchList').innerHTML = '<div class="status">先にフライトを登録してください。</div>'; return; }
+  var active = withTasks.filter(function (f) { return !f.archived_at; });
+  var archived = withTasks.filter(function (f) { return !!f.archived_at; });
+  var openKeys = {};
+  document.querySelectorAll('#sketchList details[open]').forEach(function () { openKeys.archived = true; });
+  el('sketchList').innerHTML = active.map(sketchGroup).join('') +
+    (archived.length ? '<details' + (openKeys.archived ? ' open' : '') + '><summary>アーカイブ済みのフライト（' + archived.length + '件）</summary>' +
+      archived.map(sketchGroup).join('') + '</details>' : '');
+}
+
+function renderMembers(admins) {
+  el('memberList').innerHTML = admins.map(function (a) {
+    return '<div class="row"><span>' + esc(a.email) + (a.note ? ' <span class="status">' + esc(a.note) + '</span>' : '') +
+      '</span><span class="status">' + esc(new Date(a.added_at).toLocaleDateString('ja-JP')) + '〜</span></div>';
+  }).join('');
+}
+
+// ---------------------------------------------------------------------
+// 履歴
+// ---------------------------------------------------------------------
+var historyRows = {};
+function loadHistory(key) {
+  var box = el('history-' + safeSegment(key));
+  sb.from('history').select('id,at,actor,table_name,op,row_key,old_row,new_row')
+    .or('row_key.eq."' + key.replace(/"/g, '') + '",row_key.like."' + key.replace(/["*]/g, '') + '/*"')
+    .order('at', { ascending: false }).limit(30)
+    .then(function (res) {
+      if (!box) return;
+      if (res.error) { box.textContent = '履歴を読めませんでした: ' + res.error.message; return; }
+      if (!res.data.length) { box.textContent = '履歴はまだありません'; return; }
+      box.innerHTML = res.data.map(function (h) {
+        historyRows[h.id] = h;
+        var what, restore = '';
+        if (h.table_name === 'sketches') {
+          what = 'スケッチ Task ' + esc(h.row_key.split('/').slice(1).join('/')) + ' ' + ({ INSERT: '追加', UPDATE: '差し替え', DELETE: '削除' }[h.op]);
+        } else if (h.op === 'INSERT') {
+          what = '登録';
+        } else if (h.op === 'DELETE') {
+          what = '削除';
+        } else {
+          var o = h.old_row || {}, n = h.new_row || {}, parts = [];
+          if (o.label !== n.label) parts.push('ラベル');
+          if (JSON.stringify(o.data) !== JSON.stringify(n.data)) parts.push('タスク内容');
+          if (JSON.stringify(o.images) !== JSON.stringify(n.images)) parts.push('原本');
+          what = parts.length ? parts.join('・') + 'を変更' : '';
+          if (o.archived_at !== n.archived_at) what = (what ? what + '・' : '') + (n.archived_at ? 'アーカイブ' : 'アーカイブを戻す');
+          if (!what) what = '再登録（変更なし）';
+        }
+        // タスク内容が変わる前の版は、フォームに読み込んで確認してから登録し直せる
+        if (h.table_name === 'flights' && h.op === 'UPDATE' && h.old_row &&
+            JSON.stringify(h.old_row.data) !== JSON.stringify((h.new_row || {}).data)) {
+          restore = ' <button class="btn-link" data-act="load-version" data-id="' + h.id + '">変更前をフォームへ</button>';
+        }
+        return '<div class="history-row"><span>' + esc(fmt(h.at)) + '　' + what + restore + '</span><span class="status">' + esc(who(h.actor)) + '</span></div>';
+      }).join('');
+    });
+}
+
+function loadVersion(id) {
+  var h = historyRows[id];
+  if (!h || !h.old_row) return;
+  el('flightSelect').value = h.old_row.key;
+  onSelectFlight();
+  el('labelInput').value = h.old_row.label || '';
+  el('jsonInput').value = JSON.stringify(h.old_row.data, null, 2);
+  window.scrollTo({ top: el('flightSelect').offsetTop - 80, behavior: 'smooth' });
+  msg('jsonMsg', fmt(h.at) + ' に変更される前の内容を読み込みました。確認して「登録して全クルーに反映」を押すと、この内容に戻ります。', 'info');
+}
+
+// ---------------------------------------------------------------------
+// フライト
+// ---------------------------------------------------------------------
+function onSelectFlight() {
+  editingKey = el('flightSelect').value;
+  el('labelInput').value = '';
+  el('jsonInput').value = '';
+  msg('jsonMsg', '');
+  render();
+}
+
+function editFlight(key) {
+  el('flightSelect').value = key;
+  onSelectFlight();
+  var f = currentFlight();
+  if (f) el('jsonInput').value = JSON.stringify(f.data, null, 2);
+  window.scrollTo({ top: el('flightSelect').offsetTop - 80, behavior: 'smooth' });
+  msg('jsonMsg', '今の内容を読み込みました。直して「登録して全クルーに反映」を押すと上書きされます。', 'info');
+}
+
+function saveJson() {
+  var parsed;
+  try {
+    var m = el('jsonInput').value.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('JSONが見つかりません');
+    parsed = JSON.parse(m[0]);
+    if (!Array.isArray(parsed.tasks) || !parsed.tasks.length) throw new Error('tasks が含まれていません');
+  } catch (e) {
+    msg('jsonMsg', 'エラー: ' + esc(e.message), 'err');
+    return;
+  }
+  var label = el('labelInput').value.trim();
+  var existing = currentFlight();
+  var key = editingKey;
+  if (!existing) {
+    label = label || suggestLabel(parsed);
+    key = slugify(label);
+    existing = flights.filter(function (f) { return f.key === key; })[0] || null;
+    if (existing && !confirm('同じキー（' + key + '）の「' + existing.label + '」があります。上書きしますか？')) return;
+  }
+  label = label || existing.label;
+  var row = { label: label, date: String((parsed.basicInfo && parsed.basicInfo.date) || ''), data: parsed };
+  el('saveBtn').disabled = true;
+  msg('jsonMsg', '保存中…', 'info');
+  var op = existing
+    ? sb.from('flights').update(row).eq('key', key).select().then(mustRows)
+    : sb.from('flights').insert(Object.assign({ key: key, images: [] }, row)).select().then(must);
+  op.then(function () {
+    editingKey = key;
+    el('jsonInput').value = '';
+    el('labelInput').value = '';
+    return refresh().then(function () {
+      msg('jsonMsg', '✅ 「' + esc(label) + '」を登録しました（' + parsed.tasks.length + 'タスク）。クルーがアプリで「↻」すると反映されます。', 'ok');
+    });
+  }).catch(function (e) {
+    msg('jsonMsg', '保存に失敗: ' + esc(e.message), 'err');
+  }).then(function () { el('saveBtn').disabled = false; });
+}
+
+function setArchived(key, archived) {
+  var f = flights.filter(function (x) { return x.key === key; })[0];
+  sb.from('flights').update({ archived_at: archived ? new Date().toISOString() : null }).eq('key', key).select()
+    .then(mustRows)
+    .then(function () {
+      return refresh().then(function () {
+        msg('jsonMsg', '「' + esc(f.label) + '」を' + (archived ? 'アーカイブしました' : '通常に戻しました'), 'ok');
+      });
+    })
+    .catch(function (e) { msg('jsonMsg', '失敗: ' + esc(e.message), 'err'); });
+}
+
+function deleteFlight(key) {
+  var f = flights.filter(function (x) { return x.key === key; })[0];
+  if (!f || !confirm('「' + f.label + '」を削除しますか？\nクルー側でも見られなくなります。\n（消えた内容は「履歴」には残りますが、画像は戻せません。普段はアーカイブを使ってください）')) return;
+  var files = (f.images || []).slice();
+  sketches.forEach(function (s) { if (s.flight_key === key) { files.push(s.path); if (s.thumb_path) files.push(s.thumb_path); } });
+  sb.from('flights').delete().eq('key', key).select().then(mustRows)
+    .then(function () { return files.length ? sb.storage.from(BUCKET).remove(files) : null; })
+    .then(function () {
+      if (editingKey === key) editingKey = '';
+      return refresh().then(function () { msg('jsonMsg', '「' + esc(f.label) + '」を削除しました', 'ok'); });
+    })
+    .catch(function (e) { msg('jsonMsg', '削除に失敗: ' + esc(e.message), 'err'); });
+}
+
+// ---------------------------------------------------------------------
+// 画像
+// ---------------------------------------------------------------------
+function canvasToBlob(canvas, quality) {
+  return new Promise(function (resolve, reject) {
+    canvas.toBlob(function (b) { b ? resolve(b) : reject(new Error('画像に変換できませんでした')); }, 'image/jpeg', quality);
+  });
+}
+
+/** 画像ファイルを長辺 longEdge の JPEG にする（白背景。透過PNGが黒くならないように） */
+function compressImage(file, longEdge, quality) {
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    img.onload = function () {
+      var canvas = document.createElement('canvas');
+      var scale = Math.min(1, longEdge / Math.max(img.width, img.height));
+      canvas.width = Math.floor(img.width * scale);
+      canvas.height = Math.floor(img.height * scale);
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      canvasToBlob(canvas, quality).then(resolve, reject);
+    };
+    img.onerror = function () { reject(new Error('画像を読み込めませんでした')); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function upload(path, blob) {
+  return sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false })
+    .then(must).then(function () { return path; });
+}
+
+/** 上げた画像を原本ページとして後ろに足す。フライトの行は最新を読み直してから書く */
+function appendPages(key, paths) {
+  return sb.from('flights').select('images').eq('key', key).single().then(must).then(function (row) {
+    return sb.from('flights').update({ images: (row.images || []).concat(paths) }).eq('key', key).select().then(mustRows);
+  });
+}
+
+function uploadImage(input) {
+  var file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!editingKey) { msg('imageMsg', '先に「2.」でフライトを選んでください', 'err'); return; }
+  var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  (isPdf ? uploadPdf(file) : uploadImageFile(file))
+    .then(function (n) { return refresh().then(function () { msg('imageMsg', '✅ ' + n + 'ページを保存しました', 'ok'); }); })
+    .catch(function (e) { return refresh().then(function () { msg('imageMsg', '保存に失敗: ' + esc(e.message), 'err'); }); });
+}
+
+function uploadImageFile(file) {
+  var key = editingKey, page = (currentFlight().images || []).length + 1;
+  msg('imageMsg', '圧縮して保存中…', 'info');
+  return compressImage(file, PAGE_LONG_EDGE, PAGE_QUALITY)
+    .then(function (blob) { return upload('originals/' + safeSegment(key) + '/' + page + '-' + version() + '.jpg', blob); })
+    .then(function (path) { return appendPages(key, [path]); })
+    .then(function () { return 1; });
+}
+
+/** PDF はブラウザ内で1ページずつ画像に描画してから上げ、最後にまとめてフライトに足す */
+function uploadPdf(file) {
+  if (typeof pdfjsLib === 'undefined') {
+    return Promise.reject(new Error('PDFの読み込みライブラリを取得できませんでした。通信状態を確認してもう一度お試しください'));
+  }
+  var key = editingKey, start = (currentFlight().images || []).length;
+  msg('imageMsg', 'PDFを読み込み中…', 'info');
+  return file.arrayBuffer().then(function (buf) {
+    return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  }).then(function (pdf) {
+    var paths = [], chain = Promise.resolve();
+    for (var n = 1; n <= pdf.numPages; n++) (function (pageNum) {
+      chain = chain.then(function () {
+        msg('imageMsg', 'ページ' + pageNum + ' / ' + pdf.numPages + ' を保存中…', 'info');
+        return pdf.getPage(pageNum).then(function (page) {
+          var raw = page.getViewport({ scale: 1 });
+          var viewport = page.getViewport({ scale: Math.min(2, PAGE_LONG_EDGE / Math.max(raw.width, raw.height)) });
+          var canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise
+            .then(function () { return canvasToBlob(canvas, PAGE_QUALITY); })
+            .then(function (blob) { return upload('originals/' + safeSegment(key) + '/' + (start + pageNum) + '-' + version() + '.jpg', blob); })
+            .then(function (path) { paths.push(path); });
+        });
+      });
+    })(n);
+    return chain.then(function () { return appendPages(key, paths); }).then(function () { return paths.length; });
+  });
+}
+
+function deleteLastImage() {
+  var f = currentFlight();
+  if (!f || !(f.images || []).length) return;
+  if (!confirm('最後のページ（' + f.images.length + 'ページ目）を削除しますか？')) return;
+  var last = f.images[f.images.length - 1];
+  sb.from('flights').update({ images: f.images.slice(0, -1) }).eq('key', f.key).select().then(mustRows)
+    .then(function () { return sb.storage.from(BUCKET).remove([last]); })
+    .then(function () { return refresh().then(function () { msg('imageMsg', '最後のページを削除しました', 'ok'); }); })
+    .catch(function (e) { msg('imageMsg', '削除に失敗: ' + esc(e.message), 'err'); });
+}
+
+function upSketch(input, flightKey, taskNo) {
+  var file = input.files[0];
+  if (!file) return;
+  msg('sketchMsg', 'Task ' + esc(taskNo) + ' を保存中…', 'info');
+  var base = 'sketches/' + safeSegment(flightKey) + '/' + safeSegment(taskNo) + '-' + version();
+  var prev = sketches.filter(function (s) { return s.flight_key === flightKey && s.task_no === taskNo; })[0];
+  Promise.all([compressImage(file, PAGE_LONG_EDGE, PAGE_QUALITY), compressImage(file, THUMB_LONG_EDGE, THUMB_QUALITY)])
+    .then(function (blobs) { return Promise.all([upload(base + '.jpg', blobs[0]), upload(base + '-thumb.jpg', blobs[1])]); })
+    .then(function (paths) {
+      return sb.from('sketches').upsert({ flight_key: flightKey, task_no: taskNo, path: paths[0], thumb_path: paths[1] }).select().then(mustRows);
+    })
+    .then(function () { return prev ? sb.storage.from(BUCKET).remove([prev.path, prev.thumb_path].filter(Boolean)) : null; })
+    .then(function () { return refresh().then(function () { msg('sketchMsg', '✅ Task ' + esc(taskNo) + ' のスケッチを保存しました', 'ok'); }); })
+    .catch(function (e) { msg('sketchMsg', '保存に失敗: ' + esc(e.message), 'err'); });
+}
+
+function delSketch(flightKey, taskNo) {
+  if (!confirm('Task ' + taskNo + ' のスケッチを削除しますか？')) return;
+  var s = sketches.filter(function (x) { return x.flight_key === flightKey && x.task_no === taskNo; })[0];
+  sb.from('sketches').delete().eq('flight_key', flightKey).eq('task_no', taskNo).select().then(mustRows)
+    .then(function () { return s ? sb.storage.from(BUCKET).remove([s.path, s.thumb_path].filter(Boolean)) : null; })
+    .then(function () { return refresh().then(function () { msg('sketchMsg', 'Task ' + esc(taskNo) + ' のスケッチを削除しました', 'ok'); }); })
+    .catch(function (e) { msg('sketchMsg', '削除に失敗: ' + esc(e.message), 'err'); });
+}
+
+// ---------------------------------------------------------------------
+// 操作
+// ---------------------------------------------------------------------
+document.addEventListener('click', function (ev) {
+  var node = ev.target.closest ? ev.target.closest('[data-act]') : null;
+  if (!node) return;
+  var key = node.getAttribute('data-key');
+  switch (node.getAttribute('data-act')) {
+    case 'edit-flight': editFlight(key); break;
+    case 'delete-flight': deleteFlight(key); break;
+    case 'archive-flight': setArchived(key, true); break;
+    case 'unarchive-flight': setArchived(key, false); break;
+    case 'history': openHistory = openHistory === key ? '' : key; renderFlights(); break;
+    case 'load-version': loadVersion(Number(node.getAttribute('data-id'))); break;
+    case 'delete-sketch': delSketch(node.getAttribute('data-flightkey'), node.getAttribute('data-taskno')); break;
+    case 'pick-sketch': {
+      var target = el(node.getAttribute('data-target'));
+      if (target) target.click();
+      break;
+    }
+  }
+});
+
+document.addEventListener('change', function (ev) {
+  var node = ev.target;
+  if (node.getAttribute && node.getAttribute('data-act') === 'upload-sketch') {
+    upSketch(node, node.getAttribute('data-flightkey'), node.getAttribute('data-taskno'));
+  }
+});
+
+if (!sb) {
+  show('loginScreen');
+  msg('loginMsg', '接続先が設定されていません（docs/config.js の supabaseUrl / supabaseAnonKey）。' +
+    (window.supabase ? '' : '\nまたはライブラリを読み込めませんでした。通信状態を確認してください。'), 'err');
+} else {
+  sb.auth.getSession().then(function (res) { enter(res.data.session); });
+  sb.auth.onAuthStateChange(function (event) {
+    if (event === 'PASSWORD_RECOVERY') { arrivedFor = 'recovery'; show('passwordScreen'); }
+  });
+}
+</script>
+</body>
+</html>

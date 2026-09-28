@@ -60,6 +60,8 @@ self.addEventListener('fetch', function (event) {
   }
   // それ以外の別オリジン（Supabase のデータ API など）はキャッシュに触れずネットワークへ
   if (url.origin !== self.location.origin) return;
+  // 管理画面（admin/）は常に最新を使う。キャッシュすると修正が1回遅れて反映される
+  if (url.pathname.indexOf('/admin/') >= 0) return;
 
   // stale-while-revalidate: まずキャッシュを返し、裏で更新する
   event.respondWith(

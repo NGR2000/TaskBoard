@@ -15,6 +15,8 @@
 
 import argparse
 import base64
+import email.parser
+import email.policy
 import hashlib
 import hmac
 import json
@@ -204,6 +206,19 @@ class Handler(BaseHTTPRequestHandler):
         if sub.startswith('object/') and self.command in ('POST', 'PUT'):
             name = sub[len('object/'):]
             data = self.body()
+            ctype = self.headers.get('Content-Type', 'application/octet-stream')
+            cache = self.headers.get('Cache-Control') or ''
+            if ctype.startswith('multipart/form-data'):
+                # supabase-js は Blob を multipart で送る（cacheControl とファイル本体）
+                msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
+                    b'Content-Type: ' + ctype.encode() + b'\r\n\r\n' + data)
+                for part in msg.iter_parts():
+                    field = part.get_param('name', header='content-disposition')
+                    if field == 'cacheControl':
+                        cache = 'max-age=' + part.get_content().strip()
+                    elif part.get_filename() is not None or field == '':
+                        data = part.get_payload(decode=True)
+                        ctype = part.get_content_type()
             if not self.is_admin():
                 return self.reply(403, {'statusCode': '403', 'error': 'Unauthorized',
                                         'message': 'new row violates row-level security policy'})
@@ -214,8 +229,7 @@ class Handler(BaseHTTPRequestHandler):
             with open(full, 'wb') as fh:
                 fh.write(data)
             with open(full + '.meta', 'w') as fh:
-                json.dump({'type': self.headers.get('Content-Type', 'application/octet-stream'),
-                           'cache': self.headers.get('Cache-Control') or 'max-age=3600'}, fh)
+                json.dump({'type': ctype, 'cache': cache or 'max-age=3600'}, fh)
             return self.reply(200, {'Key': name, 'Id': str(uuid.uuid4())})
 
         if sub.startswith('object/') and self.command == 'DELETE':
