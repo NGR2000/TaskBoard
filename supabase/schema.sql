@@ -187,7 +187,18 @@ create policy "history: admins read" on public.history
   for select to authenticated using (public.is_admin());
 -- history への書き込みはトリガーだけ（security definer）。直接の書き込み・改ざんはできない
 
+-- =====================================================================
+-- テーブルの公開（GRANT）
+-- =====================================================================
+-- 2026年5月30日以降に作った Supabase プロジェクトは、public のテーブルを
+-- 自動では API に公開しない。RLS とは別に、ここで明示的に許可する
+-- （古いプロジェクトでは既に付いているので、流し直しても害は無い）。
+grant usage on schema public to anon, authenticated;
+grant select on public.flights, public.sketches to anon, authenticated;
+grant insert, update, delete on public.flights, public.sketches to authenticated;
+grant select on public.history, public.admins to authenticated;
 grant select on public.flight_list to anon, authenticated;
+grant execute on function public.is_admin() to anon, authenticated;
 
 -- =====================================================================
 -- 画像の置き場所（Storage）

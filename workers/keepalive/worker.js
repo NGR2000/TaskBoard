@@ -35,9 +35,10 @@ export default {
 };
 
 async function rest(env, path) {
-  const res = await fetch(env.SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + path, {
-    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + env.SUPABASE_ANON_KEY }
-  });
+  // 新しい publishable キー（sb_publishable_...）は apikey だけに載せる。旧来の anon キー（JWT）は両方に
+  const headers = { apikey: env.SUPABASE_ANON_KEY };
+  if (!env.SUPABASE_ANON_KEY.startsWith('sb_')) headers.Authorization = 'Bearer ' + env.SUPABASE_ANON_KEY;
+  const res = await fetch(env.SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + path, { headers });
   if (!res.ok) throw new Error('Supabase ' + res.status + ': ' + (await res.text()).slice(0, 300));
   return res.json();
 }

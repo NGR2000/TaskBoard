@@ -33,7 +33,9 @@ def check(ok, what):
 
 def raw(db, method, path, body=None, token=None, headers=None):
     """エラーでも止まらずに (status, 本文) を返す"""
-    h = {'apikey': db.anon_key, 'Authorization': 'Bearer ' + (token or db.anon_key)}
+    h = {'apikey': db.anon_key}
+    if token or not db.anon_key.startswith('sb_'):
+        h['Authorization'] = 'Bearer ' + (token or db.anon_key)
     data = None
     if body is not None:
         data = body if isinstance(body, bytes) else json.dumps(body).encode()

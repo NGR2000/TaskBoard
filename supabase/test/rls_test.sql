@@ -63,7 +63,13 @@ do $$ declare r record; begin
   raise notice 'OK  匿名は flight_list を読める (task_count=%, competition=%)', r.task_count, r.competition_name;
   if (select count(*) from public.sketches) <> 1 then raise exception 'NG 匿名がスケッチを読めない'; end if;
   raise notice 'OK  匿名はスケッチ一覧を読める';
-  if (select count(*) from public.history) <> 0 then raise exception 'NG 匿名に履歴が見えた'; end if;
+end $$;
+-- 権限エラー（GRANT なし）でも 0 行（RLS）でも、見えなければよい
+do $$ begin
+  begin
+    if (select count(*) from public.history) <> 0 then raise exception 'NG 匿名に履歴が見えた'; end if;
+  exception when insufficient_privilege then null;
+  end;
   raise notice 'OK  匿名に履歴は見えない';
 end $$;
 select pg_temp.expect_denied($$update public.flights set label = 'hacked'$$, '匿名は書き換えられない');

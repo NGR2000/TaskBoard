@@ -86,15 +86,26 @@ Branch: `main` / フォルダ: `/docs` → Save。
 
 ### 2. Supabase のプロジェクトを作る
 
-1. https://supabase.com でアカウントを作り、New project（リージョンは **Tokyo**、プランは Free）
-2. **SQL Editor** → New query → `supabase/schema.sql` の全文を貼って **Run**
+1. https://supabase.com でアカウントを作る（GitHub アカウントでも可）。Organization を1つ作る（Free）
+2. **New project**
+   - Project name: `taskboard`
+   - Database Password: Generate で自動生成し、パスワード管理アプリなどに控える（普段は使わない）
+   - Region: **Tokyo**（Northeast Asia）
+   - 「Automatically expose new tables」のような公開設定は、オンでもオフでもよい
+     （`schema.sql` が必要な公開を明示している）
+3. **SQL Editor** → New query → `supabase/schema.sql` の全文を貼って **Run**。
+   「Success. No rows returned」と出れば完了
    （このファイルを更新した時も、同じように全文を流し直せばよい。データは消えない）
-3. **Authentication → Sign In / Providers → Email** で「Allow new users to sign up」を**オフ**にする
-   （メンバーは招待だけで増やす）
-4. **Authentication → URL Configuration** の Site URL を `https://ngr2000.github.io/TaskBoard/admin/` にする
-   （招待・パスワード再設定メールのリンクの行き先）
-5. **Project Settings → API** の Project URL と anon public キーを `docs/config.js` に書いてコミットする。
-   どちらも公開前提の値（anon キーでできるのは読み取りだけ）
+4. **Authentication → Sign In / Providers** の「**Allow new users to sign up**」を**オフ**にして保存
+   （知らない人がアカウントを作れないようにする。メンバーは招待だけで増やす）
+5. **Authentication → URL Configuration** の **Site URL** を
+   `https://ngr2000.github.io/TaskBoard/admin/` にして保存（招待・パスワード再設定メールのリンクの行き先）
+6. **Project Settings → API Keys** で次の2つを控え、`docs/config.js` に書いてコミットする。
+   どちらも公開前提の値（読み取りしかできない）
+   - Project URL（`https://xxxx.supabase.co`）… Project Settings → Data API（または Connect ボタン）にもある
+   - **anon キー**（`eyJ` で始まる長い文字列。「Legacy API keys」のタブにある）か、
+     **publishable キー**（`sb_publishable_` で始まる）のどちらか。どちらでも動く
+   - **service_role キー・secret キーは絶対に使わない・書かない**（全権限を持つ）
 
 ### 3. メンバーを追加する（自分も含めて）
 

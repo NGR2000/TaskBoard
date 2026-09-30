@@ -93,7 +93,11 @@ class Client:
 
     # ------------------------------------------------------------------
     def _request(self, method, url, body=None, headers=None, raw=False, content_type='application/json'):
-        h = {'apikey': self.anon_key, 'Authorization': 'Bearer ' + (self.token or self.anon_key)}
+        h = {'apikey': self.anon_key}
+        # 新しい publishable キー（sb_publishable_...）は Authorization に載せると弾かれる。
+        # 旧来の anon キー（JWT）は両方に載せる。ログイン後はユーザーのトークンを載せる
+        if self.token or not self.anon_key.startswith('sb_'):
+            h['Authorization'] = 'Bearer ' + (self.token or self.anon_key)
         if body is not None:
             h['Content-Type'] = content_type
             if not isinstance(body, (bytes, bytearray)):

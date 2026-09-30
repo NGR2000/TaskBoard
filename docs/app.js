@@ -407,7 +407,7 @@
     return fetch(CFG.supabaseUrl + '/rest/v1/' + path, {
       signal: ctrl.signal,
       cache: 'no-store',
-      headers: { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey }
+      headers: anonHeaders()
     }).then(function (res) {
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -416,6 +416,13 @@
       clearTimeout(timer);
       throw new Error(e && e.name === 'AbortError' ? '応答がありません（タイムアウト）' : '接続に失敗しました');
     });
+  }
+
+  /** 新しい publishable キー（sb_publishable_...）は apikey だけに載せる。旧来の anon キー（JWT）は両方に */
+  function anonHeaders() {
+    var h = { apikey: CFG.supabaseAnonKey };
+    if (CFG.supabaseAnonKey.indexOf('sb_') !== 0) h.Authorization = 'Bearer ' + CFG.supabaseAnonKey;
+    return h;
   }
 
   function publicUrl(path) {

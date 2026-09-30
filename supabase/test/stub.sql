@@ -16,6 +16,5 @@ alter table storage.objects enable row level security;
 grant usage on schema storage, public to anon, authenticated;
 grant all on storage.objects to anon, authenticated;
 grant usage on all sequences in schema storage to anon, authenticated;
--- Supabase は public のテーブルに既定で anon / authenticated の権限を付ける
-alter default privileges in schema public grant all on tables to anon, authenticated;
-alter default privileges in schema public grant all on sequences to anon, authenticated;
+-- 2026年5月30日以降の Supabase は public のテーブルを自動では公開しない。
+-- それに合わせて既定の権限は付けず、schema.sql の GRANT だけで動くことを確かめる。
