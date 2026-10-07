@@ -1151,9 +1151,19 @@
 
   /** 読めなかった時（圏外で未保存など）は壊れた画像アイコンではなく理由を出す */
   function imgTag(url, alt) {
-    return '<img src="' + esc(url) + '" alt="' + esc(alt) + '" onerror="this.outerHTML=\'<div class=&quot;center-note&quot;>' +
-      '画像を読み込めませんでした。<br>電波のある場所で開き直してください。</div>\'">';
+    return '<img src="' + esc(url) + '" alt="' + esc(alt) + '" onerror="TaskBoardImageError(this)">';
   }
+
+  /** 電波が弱いと1回目が途切れることがあるので、少し待って2回まで読み直してから諦める */
+  window.TaskBoardImageError = function (img) {
+    var tries = Number(img.getAttribute('data-tries') || 0);
+    if (tries < 2 && navigator.onLine) {
+      img.setAttribute('data-tries', tries + 1);
+      setTimeout(function () { img.src = img.src.split('#')[0] + '#retry' + (tries + 1); }, 1500 * (tries + 1));
+      return;
+    }
+    img.outerHTML = '<div class="center-note">画像を読み込めませんでした。<br>電波のある場所で開き直してください。</div>';
+  };
 
   // ---------- 設定 ----------
   function viewSettings() {
