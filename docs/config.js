@@ -7,8 +7,8 @@
  * （supabase/schema.sql の RLS）。
  */
 window.TASKBOARD_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://qlcslkvpudelhmcnjbcf.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsY3Nsa3ZwdWRlbGhtY25qYmNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzIwNjgsImV4cCI6MjEwNjk0ODA2OH0.Hsza62zZzyO671gEk6cuDLIBriOyc6eUSVu8Na9kfKY",
   appName: "TaskBoard",
   eventName: "26th FAI World Hot Air Balloon Championship 2026"
 };
