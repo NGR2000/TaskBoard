@@ -11,7 +11,7 @@
  *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v4.1.2';
+var CACHE_VERSION = 'taskboard-v4.1.3';
 var IMAGE_CACHE = 'taskboard-images'; // app.js と同じ名前
 var IMAGE_PATH = '/storage/v1/object/public/taskboard/';
 var IMAGE_CACHE_MAX = 400; // これを超えたら古いものから消す（1大会で数十枚程度）
@@ -60,8 +60,10 @@ self.addEventListener('fetch', function (event) {
   }
   // それ以外の別オリジン（Supabase のデータ API など）はキャッシュに触れずネットワークへ
   if (url.origin !== self.location.origin) return;
-  // 管理画面（admin/）は常に最新を使う。キャッシュすると修正が1回遅れて反映される
+  // 管理画面（admin/）と、管理画面が読み込むもの（config.js など）は常に最新を使う。
+  // キャッシュすると、設定を変えても管理画面に1回遅れて反映される
   if (url.pathname.indexOf('/admin/') >= 0) return;
+  if (req.referrer && req.referrer.indexOf('/admin/') >= 0) return;
 
   // stale-while-revalidate: まずキャッシュを返し、裏で更新する
   event.respondWith(
