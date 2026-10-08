@@ -170,6 +170,10 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
 
 <script>
 var CFG = window.TASKBOARD_CONFIG || {};
+// 変換係を起こす Worker。config.js にも書いてあるが、古い Service Worker が残った端末では
+// 保存済みの古い config.js（空の notifyUrl）が1回返ってくるため、管理画面の本体にも持っておく
+// （管理画面の本体は Service Worker の保存対象外なので、必ず最新が届く）
+var NOTIFY_URL = CFG.notifyUrl || 'https://taskboard-keepalive.rnogamigm.workers.dev';
 var BUCKET = 'taskboard';
 // 原本・スケッチの圧縮。tools/publish.py（PAGE_LONG_EDGE / THUMB_LONG_EDGE）と揃えてある
 var PAGE_LONG_EDGE = 1200, PAGE_QUALITY = 0.72;
@@ -399,7 +403,7 @@ function renderFlights() {
             : '<button class="btn-secondary btn-inline" data-act="archive-flight" data-key="' + esc(f.key) + '">アーカイブ</button>') +
           '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '">削除</button>' +
           '<button class="btn-link" data-act="history" data-key="' + esc(f.key) + '">履歴</button>' +
-          (f.data && f.data.awaitingConversion && CFG.notifyUrl
+          (f.data && f.data.awaitingConversion && NOTIFY_URL
             ? '<button class="btn-small" data-act="request-conversion" data-key="' + esc(f.key) + '">変換を依頼</button>' : '') +
         '</div>' +
       '</div>' +
@@ -582,10 +586,10 @@ function quickRegister() {
  * 失敗しても登録自体は済んでいるので、結果は文で返すだけにする。
  */
 function requestConversion(key) {
-  if (!CFG.notifyUrl) return Promise.resolve('変換は Claude が決まった時間帯に行います。');
+  if (!NOTIFY_URL) return Promise.resolve('変換は Claude が決まった時間帯に行います。');
   return sb.auth.getSession().then(function (res) {
     var token = res.data.session && res.data.session.access_token;
-    return fetch(CFG.notifyUrl.replace(/\/$/, '') + '/notify', {
+    return fetch(NOTIFY_URL.replace(/\/$/, '') + '/notify', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: key })
