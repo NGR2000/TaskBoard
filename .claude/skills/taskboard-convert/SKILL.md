@@ -58,6 +58,19 @@ The app orders flights newest-first and groups the archive by year/month by pull
 
 `scoringPeriodEnd` drives a live countdown, but only for clock times (`0745`, `09:00:00`). Relative ends like `TO+2,5h` are kept verbatim, render as text, and the countdown stays `--:--`. Say so when handing over — it looks like a bug otherwise.
 
+### Japanese domestic events (Honda Grand Prix, e.g. 一関・平泉)
+
+Worked example: `JSON/ichinoseki2025_1010am_TaskDataSheet.pdf` → `JSON/ichinoseki2025_1010am.json`. The sheet is in English but laid out differently from NTA-Competition sheets:
+
+- Date like `Friday | 10-Oct-2025 | AM, 0520` → `date: "2025.10.10 AM"`, printed form kept as a `Date / Time (as printed)` field.
+- The second title line ("2025 Hot Air Balloon Honda Grand Prix - 2nd round -") → an `Event` field.
+- Coordinates are printed with a space and **no altitude** (`target GPS : 1523 0769 (yellow target) MMA R 70m`) → `{ "name": "yellow target", "coordinates": "1523/0769", "mma": "R70m" }`. Don't invent an altitude; the colour is the target's name.
+- `Scoring Period  ends at 0800` → `scoringPeriodEnd: "0800"` (a clock time, so the countdown works).
+- `Logger Marker  Log Mark 1` → `loggerMarker: "1"`. `Log Goal 1, 2 and 3` stays in the declaration-method text.
+- Blank Marker Colour / Marker Drop / MMA cells are omitted, not filled.
+- The boxed remarks under the tasks ("Task 1 HWZ and Task 2 PDG may be flown in either order.") → `basicInfo.notes` with `notesJa`.
+- On a phone photo of such a sheet, read every coordinate twice — four-digit groups are where misreads hide.
+
 ## Step 3 — Bilingual text, only where the dictionary can't help
 
 The dictionary translates short enum-like values on its own (colours, "Free", "In Order", "not required", "entire contest area"). Add `valueJa` only to sentence-length values — declaration methods, scoring-area descriptions, validity-time rules, point A/B definitions; add `notesJa` to every `notes`. Rule of thumb: if you had to think about phrasing rather than look up a word, it needs `valueJa`. Distance limits ("min. 2km, max. no") are numbers, not sentences — leave them.
