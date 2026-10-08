@@ -1,37 +1,33 @@
 /**
- * TaskBoard キープアライブ兼バックアップ（Cloudflare Worker）
+ * TaskBoard keep-alive, backup and conversion trigger (Cloudflare Worker).
+ * ASCII only on purpose: it is pasted into the Cloudflare dashboard editor.
  *
- * Supabase の無料プランは、1週間ほぼアクセスが無いとプロジェクトを一時停止する。
- * 大会シーズンの合間に止まらないよう、毎日1回テーブルを1件だけ読む。
- * あわせて週1回、フライトとスケッチの全行と画像を R2 にバックアップする
- * （無料プランには Supabase 側のバックアップが無いため）。
+ * - Daily: read one row so the free Supabase project never pauses.
+ * - Weekly: copy all flights/sketches rows and new images to R2.
+ * - POST /notify: called by the admin page after a photo-only registration;
+ *   checks the caller is an admin and the flight awaits conversion, then
+ *   fires the "TaskBoard conversion" Claude Code routine.
  *
- * もう1つの役割として、管理画面の「写真だけで速報登録」が終わった時に呼ばれ、
- * Claude Code のルーティン（変換係）を起動する（POST /notify）。呼んできた人が
- * 管理メンバーかを Supabase で確かめてから起動するので、URL を知られても悪用されない。
- *
- * 設定手順は同じフォルダの README.md。
- *
- * 環境変数:  SUPABASE_URL, SUPABASE_ANON_KEY（公開の値）
- *            ROUTINE_FIRE_URL（ルーティンの /fire の URL）
- *            ROUTINE_TOKEN（ルーティンのトークン。必ず「Secret」として登録する）
- * R2 の紐づけ: BACKUP（変数名）
- * Cron:      毎日   "0 18 * * *"  … キープアライブ（日本時間 3:00）
- *            週1回  "30 18 * * 0" … キープアライブ＋バックアップ（日本時間 月曜 3:30）
+ * Variables: SUPABASE_URL, SUPABASE_ANON_KEY (public),
+ *            ROUTINE_FIRE_URL (text), ROUTINE_TOKEN (Secret)
+ * R2 binding: BACKUP
+ * Cron: "0 18 * * *" daily keep-alive, "30 18 * * SUN" weekly backup
+ *       (Cloudflare counts weekdays 1-7 or SUN-SAT; 0 is rejected.)
+ *       Any trigger other than DAILY_CRON also runs the backup.
+ * Setup: workers/keepalive/README.md
  */
 
-const BACKUP_CRON = '30 18 * * 0';
+const DAILY_CRON = '0 18 * * *';
 
 export default {
-  async scheduled(event, env, ctx) {
+  async scheduled(controller, env, ctx) {
     await keepAlive(env);
-    if (event.cron === BACKUP_CRON) await backup(env);
+    if (controller.cron !== DAILY_CRON && env.BACKUP) await backup(env);
   },
 
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/notify') return notify(request, env);
-    // ブラウザでこの Worker の URL を開くと、キープアライブを1回実行して結果を返す（動作確認用）
     try {
       const n = await keepAlive(env);
       return Response.json({ ok: true, flights: n, at: new Date().toISOString() });
@@ -42,7 +38,6 @@ export default {
 };
 
 async function rest(env, path) {
-  // 新しい publishable キー（sb_publishable_...）は apikey だけに載せる。旧来の anon キー（JWT）は両方に
   const headers = { apikey: env.SUPABASE_ANON_KEY };
   if (!env.SUPABASE_ANON_KEY.startsWith('sb_')) headers.Authorization = 'Bearer ' + env.SUPABASE_ANON_KEY;
   const res = await fetch(env.SUPABASE_URL.replace(/\/$/, '') + '/rest/v1/' + path, { headers });
@@ -50,7 +45,6 @@ async function rest(env, path) {
   return res.json();
 }
 
-/** 実際のテーブルを1件読む。止まっていれば例外になり、ダッシュボードの Cron 履歴に失敗として残る */
 async function keepAlive(env) {
   const rows = await rest(env, 'flights?select=key&limit=1');
   console.log('keepalive ok', rows.length);
@@ -65,7 +59,6 @@ async function backup(env) {
     JSON.stringify({ at: new Date().toISOString(), flights, sketches }, null, 1),
     { httpMetadata: { contentType: 'application/json' } });
 
-  // 画像はファイル名に版が入っていて中身が変わらないので、まだ無いものだけ足す
   const have = new Set();
   let cursor;
   do {
@@ -93,7 +86,6 @@ async function backup(env) {
 }
 
 // ---------------------------------------------------------------------
-// 変換係（ルーティン）の起動
 // ---------------------------------------------------------------------
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -104,49 +96,49 @@ const CORS = {
 function reply(status, obj) {
   return Response.json(obj, { status, headers: CORS });
 }
-
-/**
- * 管理画面から { key } を、ログイン中メンバーのトークン付きで受け取る。
- * そのメンバーが admins に入っていて、key のフライトが本当に「変換待ち」なら
- * ルーティンを起動する。ルーティンのトークンはこの Worker の外には出さない。
- */
 async function notify(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
   if (request.method !== 'POST') return reply(405, { ok: false, error: 'POST only' });
-  if (!env.ROUTINE_FIRE_URL || !env.ROUTINE_TOKEN) return reply(503, { ok: false, error: '変換係が未設定です（ROUTINE_FIRE_URL / ROUTINE_TOKEN）' });
+  if (!env.ROUTINE_FIRE_URL || !env.ROUTINE_TOKEN) return reply(503, { ok: false, error: '\u5909\u63db\u4fc2\u304c\u672a\u8a2d\u5b9a\u3067\u3059\uff08ROUTINE_FIRE_URL / ROUTINE_TOKEN\uff09' });
 
   const auth = request.headers.get('Authorization') || '';
-  if (!auth.startsWith('Bearer ')) return reply(401, { ok: false, error: 'ログインが必要です' });
+  if (!auth.startsWith('Bearer ')) return reply(401, { ok: false, error: '\u30ed\u30b0\u30a4\u30f3\u304c\u5fc5\u8981\u3067\u3059' });
   const base = env.SUPABASE_URL.replace(/\/$/, '');
   const asUser = { apikey: env.SUPABASE_ANON_KEY, Authorization: auth, 'Content-Type': 'application/json' };
 
   const admin = await fetch(base + '/rest/v1/rpc/is_admin', { method: 'POST', headers: asUser, body: '{}' });
-  if (!admin.ok || (await admin.json()) !== true) return reply(403, { ok: false, error: '管理メンバーではありません' });
+  if (!admin.ok || (await admin.json()) !== true) return reply(403, { ok: false, error: '\u7ba1\u7406\u30e1\u30f3\u30d0\u30fc\u3067\u306f\u3042\u308a\u307e\u305b\u3093' });
 
   let key = '';
-  try { key = String((await request.json()).key || ''); } catch (e) { /* 下で弾く */ }
-  if (!key) return reply(400, { ok: false, error: 'key がありません' });
+  try { key = String((await request.json()).key || ''); } catch (e) { /* ignore */ }
+  if (!key) return reply(400, { ok: false, error: 'key \u304c\u3042\u308a\u307e\u305b\u3093' });
   const rows = await rest(env, 'flights?select=key,label,images&key=eq.' + encodeURIComponent(key) +
     '&data->>awaitingConversion=eq.true');
-  if (!rows.length) return reply(409, { ok: false, error: '変換待ちのフライトではありません' });
+  if (!rows.length) return reply(409, { ok: false, error: '\u5909\u63db\u5f85\u3061\u306e\u30d5\u30e9\u30a4\u30c8\u3067\u306f\u3042\u308a\u307e\u305b\u3093' });
 
-  const fired = await fetch(env.ROUTINE_FIRE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + env.ROUTINE_TOKEN,
-      'anthropic-beta': 'experimental-cc-routine-2026-04-01',
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ text: 'flight key: ' + key + ' / label: ' + rows[0].label + ' / pages: ' + (rows[0].images || []).length })
-  });
+  let fired;
+  try {
+    fired = await fetch(env.ROUTINE_FIRE_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + env.ROUTINE_TOKEN,
+        'anthropic-beta': 'experimental-cc-routine-2026-04-01',
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text: 'flight key: ' + key + ' / label: ' + rows[0].label + ' / pages: ' + (rows[0].images || []).length })
+    });
+  } catch (e) {
+    console.log('fire error', String(e));
+    return reply(502, { ok: false, error: 'routine: ' + String(e.message || e) });
+  }
   const body = await fired.text();
   if (!fired.ok) {
     console.log('fire failed', fired.status, body.slice(0, 300));
-    return reply(502, { ok: false, error: '変換係を起動できませんでした（' + fired.status + '）' });
+    return reply(502, { ok: false, error: '\u5909\u63db\u4fc2\u3092\u8d77\u52d5\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\uff08' + fired.status + '\uff09' });
   }
   let session = '';
-  try { session = JSON.parse(body).claude_code_session_url || ''; } catch (e) { /* URL が無くても起動はできている */ }
+  try { session = JSON.parse(body).claude_code_session_url || ''; } catch (e) { /* ignore */ }
   console.log('fired', key, session);
   return reply(200, { ok: true, session });
 }
