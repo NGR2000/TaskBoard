@@ -11,16 +11,18 @@
  * Variables: SUPABASE_URL, SUPABASE_ANON_KEY (public),
  *            ROUTINE_FIRE_URL (text), ROUTINE_TOKEN (Secret)
  * R2 binding: BACKUP
- * Cron: "0 18 * * *" daily keep-alive, "30 18 * * 0" weekly backup
+ * Cron: "0 18 * * *" daily keep-alive, "30 18 * * SUN" weekly backup
+ *       (Cloudflare counts weekdays 1-7 or SUN-SAT; 0 is rejected.)
+ *       Any trigger other than DAILY_CRON also runs the backup.
  * Setup: workers/keepalive/README.md
  */
 
-const BACKUP_CRON = '30 18 * * 0';
+const DAILY_CRON = '0 18 * * *';
 
 export default {
-  async scheduled(event, env, ctx) {
+  async scheduled(controller, env, ctx) {
     await keepAlive(env);
-    if (event.cron === BACKUP_CRON) await backup(env);
+    if (controller.cron !== DAILY_CRON && env.BACKUP) await backup(env);
   },
 
   async fetch(request, env) {
