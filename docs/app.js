@@ -759,10 +759,29 @@
     if (entry.updatedAt) {
       html += '<div class="updated">タスクシート更新: ' + esc(fmtDateTime(entry.updatedAt)) + '</div>';
     }
+    if (!d.tasks.length) {
+      html += awaitingConversion(meta);
+      html += '<div class="spacer"></div></div>';
+      return html;
+    }
     html += renderBasic(d.basicInfo);
     html += d.tasks.map(renderTask).join('');
     html += '<div class="spacer"></div></div>';
     return html;
+  }
+
+  /** 写真だけで速報登録されたフライト。変換が済むまでは原本をそのまま並べて見せる */
+  function awaitingConversion(meta) {
+    var images = (meta && meta.images) || [];
+    return '<div class="banner banner-warn" style="margin-bottom:12px">' +
+      '<b>⏳ タスクシートを変換中です</b><br>' +
+      '変換が終わるとタスクごとの表示に切り替わります（「↻」で確認）。それまでは下の原本を見てください。</div>' +
+      (images.length
+        ? '<div class="viewer viewer-inline">' + images.map(function (url, i) {
+            return (images.length > 1 ? '<div class="viewer-page-label">' + (i + 1) + ' / ' + images.length + '</div>' : '') +
+              imgTag(url, '原本タスクシート ' + (i + 1) + 'ページ目');
+          }).join('') + '</div>'
+        : '<div class="center-note">原本の写真がまだありません。</div>');
   }
 
   function statusBanners() {
