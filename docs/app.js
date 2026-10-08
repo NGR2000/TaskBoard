@@ -13,18 +13,17 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '3.0.0';
+  var APP_VERSION = '4.0.0';
   var LS = {
-    api: 'tb.api',
     flightsIndex: 'tb.flights.index',
     activeFlight: 'tb.activeFlight',
     sketchIdx: 'tb.sketches',
     lastSync: 'tb.lastSync',
     flightPrefix: 'tb.flight.',      // + key  -> { data, updatedAt }
-    lastViewedPrefix: 'tb.lastViewed.', // + key -> ISO timestamp
-    imagePrefix: 'tb.image.',        // + key
-    sketchPrefix: 'tb.sketch.'       // + flightKey + '.' + taskNo（大会をまたぐとタスク番号が再利用されるため）
+    lastViewedPrefix: 'tb.lastViewed.' // + key -> ISO timestamp
   };
+  // 原本・スケッチの画像は localStorage ではなく Service Worker のキャッシュに置く（sw.js）
+  var IMAGE_CACHE = 'taskboard-images';
   var CFG = window.TASKBOARD_CONFIG || {};
   var LOCAL_KEY = '__local__';
 
@@ -34,14 +33,11 @@
   var state = {
     screen: 'view',
     booted: false,
-    apiUrl: '',
-    flights: [],       // [{key,label,date,updatedAt,taskCount,competitionName,archived,imagePages}]
+    flights: [],       // [{key,label,date,updatedAt,taskCount,competitionName,archived,imagePages,images}]
                        // アーカイブ済みもここに含める。除くと圏外で開けなくなるため（restoreFromCache 参照）
     flightData: {},    // key -> { raw, data, updatedAt }
     activeFlight: '',
-    images: [],
-    sketches: [],       // [{flightKey,taskNo}] スケッチが存在する組み合わせ
-    sketchCache: {},    // key: flightKey + '.' + taskNo
+    sketches: [],       // [{flightKey,taskNo,url,thumb}] スケッチが存在する組み合わせ
     currentSketch: null,
     open: {},
     syncing: false,
@@ -397,53 +393,41 @@
   }
 
   // =======================================================================
-  // API (GET のみ。fetch が塞がれた時は JSONP に落とす)
+  // API（Supabase。読み取りだけなのでログインせず、公開の anon キーで読む）
   // =======================================================================
-  function fetchJson(url, timeoutMs) {
+  function configured() { return !!(CFG.supabaseUrl && CFG.supabaseAnonKey); }
+
+  function db(path) {
+    if (!configured()) return Promise.reject(new Error('データの取得先が設定されていません（config.js）'));
     if (typeof AbortController === 'undefined' || typeof fetch !== 'function') {
-      return Promise.reject(new Error('fetch 未対応'));
+      return Promise.reject(new Error('このブラウザは対応していません'));
     }
     var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, timeoutMs);
-    return fetch(url, { method: 'GET', signal: ctrl.signal, redirect: 'follow' })
-      .then(function (res) {
-        clearTimeout(timer);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .catch(function (e) { clearTimeout(timer); throw e; });
-  }
-
-  var jsonpSeq = 0;
-  function jsonp(url, timeoutMs) {
-    return new Promise(function (resolve, reject) {
-      var cb = '__tbcb' + (++jsonpSeq) + '_' + Date.now();
-      var script = document.createElement('script');
-      var done = false;
-      function cleanup() {
-        clearTimeout(timer);
-        try { delete window[cb]; } catch (e) { window[cb] = undefined; }
-        if (script.parentNode) script.parentNode.removeChild(script);
-      }
-      var timer = setTimeout(function () {
-        if (done) return; done = true; cleanup();
-        reject(new Error('応答がありません（タイムアウト）'));
-      }, timeoutMs);
-      window[cb] = function (data) { if (done) return; done = true; cleanup(); resolve(data); };
-      script.onerror = function () { if (done) return; done = true; cleanup(); reject(new Error('接続に失敗しました')); };
-      script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + cb;
-      document.head.appendChild(script);
+    var timer = setTimeout(function () { ctrl.abort(); }, 15000);
+    return fetch(CFG.supabaseUrl + '/rest/v1/' + path, {
+      signal: ctrl.signal,
+      cache: 'no-store',
+      headers: anonHeaders()
+    }).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }, function (e) {
+      clearTimeout(timer);
+      throw new Error(e && e.name === 'AbortError' ? '応答がありません（タイムアウト）' : '接続に失敗しました');
     });
   }
 
-  function apiGet(action, params) {
-    if (!state.apiUrl) return Promise.reject(new Error('データの取得先（GASのURL）が設定されていません'));
-    var qs = ['action=' + encodeURIComponent(action)];
-    Object.keys(params || {}).forEach(function (k) {
-      qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
-    });
-    var url = state.apiUrl + (state.apiUrl.indexOf('?') >= 0 ? '&' : '?') + qs.join('&');
-    return fetchJson(url, 15000).catch(function () { return jsonp(url, 15000); });
+  /** 新しい publishable キー（sb_publishable_...）は apikey だけに載せる。旧来の anon キー（JWT）は両方に */
+  function anonHeaders() {
+    var h = { apikey: CFG.supabaseAnonKey };
+    if (CFG.supabaseAnonKey.indexOf('sb_') !== 0) h.Authorization = 'Bearer ' + CFG.supabaseAnonKey;
+    return h;
+  }
+
+  function publicUrl(path) {
+    return CFG.supabaseUrl + '/storage/v1/object/public/taskboard/' +
+      String(path).split('/').map(encodeURIComponent).join('/');
   }
 
   // =======================================================================
@@ -543,12 +527,12 @@
   // 同期
   // =======================================================================
   function fetchFlight(key) {
-    return apiGet('flight', { key: key })
-      .then(function (res) {
-        if (!res || res.ok === false || !res.data) return;
-        saveFlightCache(key, res.data, res.updatedAt);
-        var raw = JSON.parse(res.data);
-        state.flightData[key] = { raw: raw, data: normalizeData(raw), updatedAt: res.updatedAt };
+    return db('flights?select=data,updated_at&key=eq.' + encodeURIComponent(key))
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row || !row.data) return;
+        saveFlightCache(key, JSON.stringify(row.data), row.updated_at);
+        state.flightData[key] = { raw: row.data, data: normalizeData(row.data), updatedAt: row.updated_at };
         render();
       })
       .catch(function () { /* このフライトだけ失敗。他のフライトの取得は続ける */ });
@@ -575,14 +559,27 @@
     state.syncing = true;
     state.syncError = null;
     render();
-    return apiGet('flights')
+    return Promise.all([
+      db('flight_list?select=key,label,date,images,archived_at,updated_at,task_count,competition_name' +
+         '&order=created_at.asc,key.asc'),
+      db('sketches?select=flight_key,task_no,path,thumb_path')
+    ])
       .then(function (res) {
-        if (!res || res.ok === false) throw new Error((res && res.error) || 'サーバーがエラーを返しました');
-        // サーバーは登録順（古い→新しい）で返す。フライト切替バーと自動選択は
+        // 登録順（古い→新しい）で取る。フライト切替バーと自動選択は
         // 「タスクシートの日付が新しいものが先頭」にしたいので反転する。
         // 訂正登録は既存行を上書きするだけで並びは動かないため、登録順＝日付順という前提でよい。
-        state.flights = (res.flights || []).filter(function (f) { return f.key !== LOCAL_KEY; }).reverse();
-        state.sketches = res.sketches || [];
+        state.flights = res[0].map(function (r) {
+          var images = (r.images || []).map(publicUrl);
+          return {
+            key: r.key, label: r.label, date: r.date, updatedAt: r.updated_at,
+            taskCount: r.task_count, competitionName: r.competition_name,
+            archived: r.archived_at || '', imagePages: images.length, images: images
+          };
+        }).filter(function (f) { return f.key !== LOCAL_KEY; }).reverse();
+        state.sketches = res[1].map(function (r) {
+          return { flightKey: r.flight_key, taskNo: r.task_no, url: publicUrl(r.path),
+                   thumb: r.thumb_path ? publicUrl(r.thumb_path) : '' };
+        });
         safeSet(LS.flightsIndex, JSON.stringify(state.flights));
         safeSet(LS.sketchIdx, JSON.stringify(state.sketches));
         state.lastSync = new Date().toISOString();
@@ -591,7 +588,7 @@
         safeSet(LS.activeFlight, state.activeFlight);
         state.syncing = false;
         render();
-        return prefetchFlights();
+        return prefetchFlights().then(prefetchImages);
       })
       .catch(function (e) {
         state.syncError = e.message || String(e);
@@ -610,70 +607,54 @@
     if (!state.flightData[key] && state.online && key !== LOCAL_KEY) fetchFlight(key);
   }
 
-  /** 原本タスクシートは複数ページ（image_<key>_1, _2, ...）に対応する */
-  function loadImage() {
-    var key = state.activeFlight;
-    var meta = state.flights.filter(function (f) { return f.key === key; })[0];
-    var total = (meta && meta.imagePages) || 0;
-    state.screen = 'image';
-
-    if (total === 0) { state.images = []; render(); return; }
-
-    var cached = [];
-    for (var i = 1; i <= total; i++) {
-      var c = safeGet(LS.imagePrefix + key + '.' + i);
-      if (!c) { cached = null; break; }
-      cached.push(c);
-    }
-    if (cached) { state.images = cached; render(); return; }
-
-    state.images = [];
-    state.syncing = true;
-    render();
-
-    var results = new Array(total);
-    var remaining = total;
-    var anyFailed = false;
-    function loadPage(page) {
-      apiGet('image', { key: key, page: page })
-        .then(function (res) {
-          var img = (res && res.image) || null;
-          results[page - 1] = img;
-          if (img) safeSet(LS.imagePrefix + key + '.' + page, img);
-        })
-        .catch(function () { anyFailed = true; })
-        .then(function () {
-          remaining--;
-          if (remaining > 0) return;
-          state.images = results.filter(function (x) { return !!x; });
-          state.syncing = false;
-          if (anyFailed && !state.images.length) state.syncError = '画像の取得に失敗しました';
-          render();
-        });
-    }
-    for (var p = 1; p <= total; p++) loadPage(p);
+  /**
+   * 通常フライトの原本とスケッチを裏で取り込んでおく。取り込んだ画像は sw.js が
+   * 端末に保存するので、会場で電波が悪くても一度同期していれば開ける。
+   * 画像の URL は中身が変わらない（差し替えると URL ごと変わる）ので、
+   * 保存済みのものは sw.js がネットワークに出ずに返し、二度は落とさない。
+   */
+  function prefetchImages() {
+    if (!state.online || !('caches' in window)) return;
+    var active = {};
+    var urls = [];
+    activeFlights().forEach(function (f) {
+      active[f.key] = true;
+      (f.images || []).forEach(function (u) { urls.push(u); });
+    });
+    state.sketches.forEach(function (s) {
+      if (!active[s.flightKey]) return;
+      urls.push(s.url);
+      if (s.thumb) urls.push(s.thumb);
+    });
+    return caches.open(IMAGE_CACHE).then(function (cache) {
+      var i = 0;
+      function next() {
+        if (i >= urls.length) return;
+        var url = urls[i++];
+        return cache.match(url).then(function (hit) {
+          if (hit) return;
+          return fetch(url, { mode: 'cors' }).then(function (res) {
+            if (res.ok) return cache.put(url, res);
+          });
+        }).catch(function () { /* 1枚失敗しても残りは続ける */ }).then(next);
+      }
+      return Promise.all([next(), next(), next()]); // 3並列
+    }).catch(function () { /* 先読みは失敗しても致命的ではない */ });
   }
 
-  /** スケッチはタスク番号だけでなくフライトにも紐づく（大会をまたぐと番号が再利用されるため） */
-  function sketchCacheKey(flightKey, taskNo) { return flightKey + '.' + taskNo; }
+  function loadImage() {
+    state.screen = 'image';
+    render();
+  }
+
+  function sketchEntry(flightKey, taskNo) {
+    return state.sketches.filter(function (x) { return x.flightKey === flightKey && x.taskNo === taskNo; })[0];
+  }
 
   function loadSketch(taskNo) {
-    var flightKey = state.activeFlight;
-    state.currentSketch = { flightKey: flightKey, taskNo: taskNo };
-    var ck = sketchCacheKey(flightKey, taskNo);
-    var cached = state.sketchCache[ck] || safeGet(LS.sketchPrefix + ck);
-    if (cached) { state.sketchCache[ck] = cached; state.screen = 'sketch'; render(); return; }
+    state.currentSketch = { flightKey: state.activeFlight, taskNo: taskNo };
     state.screen = 'sketch';
-    state.syncing = true;
     render();
-    apiGet('sketch', { flightKey: flightKey, taskNo: taskNo })
-      .then(function (res) {
-        var img = (res && res.image) || null;
-        state.sketchCache[ck] = img;
-        if (img) safeSet(LS.sketchPrefix + ck, img);
-      })
-      .catch(function (e) { state.syncError = e.message || String(e); })
-      .then(function () { state.syncing = false; render(); });
   }
 
   // =======================================================================
@@ -762,7 +743,7 @@
 
     if (!state.flights.length) {
       html += '<div class="center-note">' +
-        (state.apiUrl
+        (configured()
           ? 'まだフライトが登録されていません。<br>ブリーフィング後に入力担当が登録すると、ここに表示されます。<br><br>「↻」で再同期できます。'
           : 'データの取得先が未設定です。<br>右上の ⚙ から設定してください。') +
         '</div></div>';
@@ -968,10 +949,9 @@
   function renderAttach(task) {
     var no = String(task.taskNo || '');
     var flightKey = state.activeFlight;
-    var entry = state.sketches.filter(function (x) { return x.flightKey === flightKey && x.taskNo === no; })[0];
-    var has = !!entry || !!state.sketchCache[sketchCacheKey(flightKey, no)];
-    if (!has) return '<div class="attach empty">📎 スケッチなし</div>';
-    if (entry && entry.thumb) {
+    var entry = sketchEntry(flightKey, no);
+    if (!entry) return '<div class="attach empty">📎 スケッチなし</div>';
+    if (entry.thumb) {
       return '<div class="attach attach-has-thumb" data-act="sketch" data-taskno="' + esc(no) + '">' +
         '<img class="attach-thumb" src="' + esc(entry.thumb) + '" alt="スケッチのプレビュー">' +
         '<span class="attach-thumb-badge">🔍 タップで拡大</span>' +
@@ -1151,13 +1131,12 @@
   function viewImage() {
     var meta = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
     var html = header('原本タスクシート', meta ? meta.label : 'Original Task Sheet', '', 'view');
-    if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
-    if (!state.images || !state.images.length) return html + '<div class="center-note">画像がありません' +
-      (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
-    var multi = state.images.length > 1;
-    return html + '<div class="viewer">' + state.images.map(function (img, i) {
-      return (multi ? '<div class="viewer-page-label">' + (i + 1) + ' / ' + state.images.length + '</div>' : '') +
-        '<img src="' + esc(img) + '" alt="原本タスクシート ' + (i + 1) + 'ページ目">';
+    var images = (meta && meta.images) || [];
+    if (!images.length) return html + '<div class="center-note">画像がありません</div>';
+    var multi = images.length > 1;
+    return html + '<div class="viewer">' + images.map(function (url, i) {
+      return (multi ? '<div class="viewer-page-label">' + (i + 1) + ' / ' + images.length + '</div>' : '') +
+        imgTag(url, '原本タスクシート ' + (i + 1) + 'ページ目');
     }).join('') + '</div>';
   }
 
@@ -1165,23 +1144,32 @@
     var cur = state.currentSketch || {};
     var no = cur.taskNo;
     var html = header('Task ' + no + ' スケッチ', 'Sketch', '', 'view');
-    if (state.syncing) return html + '<div class="center-note">読み込み中…</div>';
-    var img = state.sketchCache[sketchCacheKey(cur.flightKey, no)];
-    if (!img) return html + '<div class="center-note">画像がありません' +
-      (state.syncError ? '<br><br>' + esc(state.syncError) : '') + '</div>';
-    return html + '<div class="viewer"><img src="' + esc(img) + '" alt="Task ' + esc(no) + ' スケッチ"></div>';
+    var entry = sketchEntry(cur.flightKey, no);
+    if (!entry) return html + '<div class="center-note">画像がありません</div>';
+    return html + '<div class="viewer">' + imgTag(entry.url, 'Task ' + no + ' スケッチ') + '</div>';
   }
+
+  /** 読めなかった時（圏外で未保存など）は壊れた画像アイコンではなく理由を出す */
+  function imgTag(url, alt) {
+    return '<img src="' + esc(url) + '" alt="' + esc(alt) + '" onerror="TaskBoardImageError(this)">';
+  }
+
+  /** 電波が弱いと1回目が途切れることがあるので、少し待って2回まで読み直してから諦める */
+  window.TaskBoardImageError = function (img) {
+    var tries = Number(img.getAttribute('data-tries') || 0);
+    if (tries < 2 && navigator.onLine) {
+      img.setAttribute('data-tries', tries + 1);
+      setTimeout(function () { img.src = img.src.split('#')[0] + '#retry' + (tries + 1); }, 1500 * (tries + 1));
+      return;
+    }
+    img.outerHTML = '<div class="center-note">画像を読み込めませんでした。<br>電波のある場所で開き直してください。</div>';
+  };
 
   // ---------- 設定 ----------
   function viewSettings() {
     var hasCache = state.flights.some(function (f) { return !!loadFlightCache(f.key); });
     return header('設定', 'Settings', '', 'view') +
       '<div class="wrap">' +
-      '<label class="field">データの取得先（GAS ウェブアプリの /exec URL）</label>' +
-      '<input type="url" id="apiInput" value="' + esc(state.apiUrl) + '" placeholder="https://script.google.com/macros/s/.../exec">' +
-      '<div class="hint">入力担当のGASウェブアプリのURLです。<br>' +
-      'config.js に書いてコミットしておけば、クルーはこの設定なしで開けます。</div>' +
-      '<button class="btn btn-primary" style="margin-top:12px" data-act="saveapi">保存して同期</button>' +
       '<button class="btn btn-secondary" data-act="screen" data-screen="local">📋 JSONを直接読み込む（この端末だけ）</button>' +
       '<div class="banner banner-info" style="margin:14px 0">' +
       '<b>オフラインについて</b><br>' +
@@ -1199,7 +1187,7 @@
       '<div class="wrap">' +
       '<div class="banner banner-info" style="margin-bottom:12px">' +
       '通信できない時の緊急用です。ここで読み込んだ内容は<b>他のクルーには共有されません</b>し、次に同期すると消えます。<br>' +
-      '共有するには入力担当がGASの管理画面から登録してください。</div>' +
+      '共有するには入力担当が管理画面から登録してください。</div>' +
       '<textarea id="jsonInput" placeholder=\'{"basicInfo":{...},"tasks":[...]}\'></textarea>' +
       (state.localError ? '<div class="banner banner-error" style="margin-top:8px">' + esc(state.localError) + '</div>' : '') +
       '<button class="btn btn-primary" style="margin-top:10px" data-act="loadlocal">読み込む</button>' +
@@ -1248,15 +1236,6 @@
       case 'rules': state.screen = 'rules'; render(); break;
       case 'archive-group': state.archiveGroup = node.getAttribute('data-group'); render(); break;
       case 'rule': state.modal = node.getAttribute('data-taskid'); renderModal(); break;
-      case 'saveapi': {
-        var v = (el('apiInput').value || '').trim();
-        state.apiUrl = v;
-        if (v) safeSet(LS.api, v); else safeRemove(LS.api);
-        state.screen = 'view';
-        render();
-        if (v) sync();
-        break;
-      }
       case 'loadlocal': {
         var text = el('jsonInput').value || '';
         try {
@@ -1285,10 +1264,11 @@
       case 'clear': {
         if (!confirm('この端末に保存したフライト・画像を消します。よろしいですか？')) break;
         Object.keys(localStorage).forEach(function (k) {
-          if (k.indexOf('tb.') === 0 && k !== LS.api) safeRemove(k);
+          if (k.indexOf('tb.') === 0) safeRemove(k);
         });
+        if ('caches' in window) caches.delete(IMAGE_CACHE);
         state.flights = []; state.flightData = {}; state.activeFlight = '';
-        state.images = []; state.sketchCache = {}; state.sketches = [];
+        state.sketches = [];
         state.lastSync = null;
         state.screen = 'view';
         render();
@@ -1303,11 +1283,13 @@
   // =======================================================================
   // 起動
   // =======================================================================
-  function resolveApiUrl() {
-    var params = new URLSearchParams(location.search);
-    var fromUrl = params.get('api');
-    if (fromUrl) { safeSet(LS.api, fromUrl); return fromUrl; }
-    return safeGet(LS.api) || CFG.apiUrl || '';
+  /** GAS 版が localStorage に置いていた base64 の画像と取得先 URL を消す（容量を空けるため） */
+  function dropLegacyStorage() {
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k === 'tb.api' || k.indexOf('tb.image.') === 0 || k.indexOf('tb.sketch.') === 0) safeRemove(k);
+      });
+    } catch (e) { /* localStorage が使えない環境 */ }
   }
 
   function loadJsonFile(path) {
@@ -1317,7 +1299,7 @@
   }
 
   function boot() {
-    state.apiUrl = resolveApiUrl();
+    dropLegacyStorage();
     Promise.all([
       loadJsonFile('./data/dictionary.json').catch(function () { return null; }),
       loadJsonFile('./data/axmer2026-ch15.json').catch(function () { return null; })
@@ -1334,7 +1316,7 @@
       });
       state.booted = true;
       render();
-      if (state.apiUrl && state.online) sync();
+      if (configured() && state.online) sync();
     });
 
     if ('serviceWorker' in navigator) {

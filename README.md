@@ -3,100 +3,136 @@
 熱気球競技のタスクシートを、AIで読み取ったJSONからクルー共有用の画面に整形して表示する仕組み。
 2026年世界選手権（26th FAI World Hot Air Balloon Championship, ポーランド・クロスノ）に向けて、
 **オフライン対応**と**タスクシート形式変更への耐性**を軸に作り直したもの。
+データの置き場所は Supabase（Postgres＋画像ストレージ）。
 
 ---
 
 ## 構成
 
 ```
-┌─────────────────────────┐        ┌──────────────────────────────┐
-│  入力担当（パイロット）  │        │      クルー（閲覧のみ）        │
-│                         │        │                              │
-│  GAS 管理画面           │        │  GitHub Pages の PWA         │
-│  .../exec               │        │  ngr2000.github.io/TaskBoard │
-│  ・フライトごとに登録    │        │  ・オフラインで開ける         │
-│  ・原本画像             │        │  ・日本語大／英語小            │
-│  ・スケッチ             │        │  ・フライト切替バーで行き来   │
-└───────────┬─────────────┘        └──────────────┬───────────────┘
-            │ google.script.run                   │ GET (JSON / JSONP)
-            ▼                                     ▼
-     ┌──────────────────────────────────────────────────┐
-     │  スプレッドシート（flights / image_* / sketch_*） │
-     └──────────────────────────────────────────────────┘
+┌─────────────────────────────┐    ┌──────────────────────────────┐
+│ 入力担当（管理メンバー）     │    │      クルー（閲覧のみ）        │
+│                             │    │                              │
+│ 管理画面  …/TaskBoard/admin/ │    │  PWA  ngr2000.github.io/     │
+│ ・メンバーごとにログイン     │    │       TaskBoard/             │
+│ ・フライト登録・原本・スケッチ│    │  ・オフラインで開ける         │
+│ ・変更履歴                   │    │  ・日本語大／英語小            │
+│ Claude（tools/publish.py）   │    │  ・フライト切替バーで行き来   │
+└──────────────┬──────────────┘    └──────────────┬───────────────┘
+               │ ログインして書き込み               │ 読み取りのみ（anon キー）
+               ▼                                   ▼
+     ┌──────────────────────────────────────────────────────┐
+     │ Supabase                                              │
+     │  Postgres: flights / sketches / admins / history      │
+     │  Storage : taskboard バケット（原本・スケッチの画像）  │
+     └──────────────────────────────────────────────────────┘
+               ▲ 毎日1回アクセス（一時停止の防止）・週1回バックアップ
+     ┌─────────┴───────────────┐
+     │ Cloudflare Worker ＋ R2 │  workers/keepalive/
+     └─────────────────────────┘
 ```
 
-**なぜこの分け方にしたか**
+**なぜこの形か**
 
-- 閲覧アプリを GitHub Pages に置いたので Service Worker が使え、**圏外でもタスクシートが開く**。
-  GAS の HtmlService はサンドボックス iframe 内で動くため、これは構造的に実現できなかった。
-- クルーに配るURLが GitHub Pages 側で固定される。**GASを何度再デプロイしてもリンクが死なない。**
-- 書き込みは GAS 管理画面の `google.script.run` に閉じているので、
-  ブラウザ→GAS の CORS 問題が発生しうる経路が無い。閲覧側は GET のみ（失敗時は JSONP に自動フォールバック）。
-- 同期時に画像の base64 を返さない。原本・スケッチのフル解像度は開いた時だけ取得し、端末に保存する
-  （タスクカードに出すスケッチのプレビューだけは軽量なサムネイルとして一覧取得に同梱している。
-  タップするとフル解像度を別途取得する）。
+- 閲覧アプリと管理画面はどちらも GitHub Pages（`docs/`）。サーバー側のコードは無く、
+  Supabase を直接読み書きする。**書き込みの可否はデータベース側の規則（RLS）で決める**
+  （`supabase/schema.sql`）。読み取りは誰でも可、書き込みは `admins` 表に載ったメンバーだけ
+- 画像はファイルのまま Storage に置き、CDN から配る。ファイル名に版が入っていて中身は二度と
+  変わらないので、端末（Service Worker）に保存したら二度と落とさない。同期のあと、
+  アーカイブしていないフライトの原本とスケッチは裏で先に取り込むので、**会場で電波が悪くても開ける**
+- **誰がいつ何を変えたか**は `history` 表に自動で残る。訂正前の内容にも戻せる
 - **フライトは上書きせず積み重ねる。** 大会中はフライトが進むごとに新しいタスクデータシートが
   発表される。直前のフライトを消してしまうと、着陸後の振り返りやスコア確認で前のフライトの
-  内容を見返せなくなる。クルーはヘッダー下のバーでいつでも過去のフライトに切り替えられる。
+  内容を見返せなくなる。クルーはヘッダー下のバーでいつでも過去のフライトに切り替えられる
+
+以前は Google Apps Script（GAS）とスプレッドシートで動いていた。画像を base64 にして
+セルに分割保存していたため遅く、管理も1人の Google アカウントに縛られていたので移行した
+（移行手順は「GAS からの移行」）。
 
 ### ファイル
 
 | パス | 役割 |
 |---|---|
-| `コード.js` | GAS。閲覧用JSON API（`?action=...`・認証なし）、管理画面の配信、書き込みAPI（`doPost`・トークン必須） |
-| `index.html` | GAS の入力・管理画面（フライト一覧・登録・編集・削除） |
-| `tools/publish.py` | 変換済みJSONと原本を書き込みAPIへ送る（ワークフローB） |
-| `tools/make_icons.py` | `tools/icon-source.png` から PWA のアイコン一式を作り直す |
-| `tests/` | GASバックエンドをNode上で動かして確かめるテスト（デプロイ不要） |
-| `.claude/skills/` | Claude 用スキル（`taskboard-convert` = 変換、`taskboard-publish` = 反映・確認・スケッチ添付まで一気に）。`taskboard-publish/scripts/` にプレビュー撮影（`preview.js`）と本番状態の確認・アーカイブ（`taskboard_state.py`）を同梱 |
-| `docs/` | GitHub Pages に公開する閲覧用PWA |
-| `docs/app.js` | 正規化・辞書適用・複数フライトの同期と切替・描画 |
+| `docs/` | GitHub Pages に公開する部分 |
+| `docs/config.js` | Supabase の URL と anon キー（公開前提の値）。アプリ・管理画面・tools が共通で読む |
+| `docs/app.js` | クルー用アプリ。正規化・辞書適用・複数フライトの同期と切替・描画 |
+| `docs/sw.js` | Service Worker（オフライン・画像の保存） |
+| `docs/admin/index.html` | 管理画面（ログイン・登録・原本・スケッチ・アーカイブ・履歴） |
 | `docs/data/dictionary.json` | **用語辞書**（英語表記 → 日本語） |
 | `docs/data/axmer2026-ch15.json` | AXMER 2026 Chapter 15 の全21タスク定義（和訳付き） |
-| `docs/sw.js` | Service Worker（オフライン） |
 | `docs/*.png` | ホーム画面／タブ用アイコン（`make_icons.py` の生成物。手で編集しない） |
+| `supabase/schema.sql` | テーブル・権限（RLS）・変更履歴・画像バケットの定義。SQL Editor に貼って流す |
+| `supabase/test/` | `schema.sql` をローカルの Postgres で検証するテスト |
+| `tools/publish.py` | 変換済みJSONと原本・スケッチを登録する（ワークフローB） |
+| `tools/taskboard_db.py` | tools 共通の Supabase クライアント（標準ライブラリのみ） |
+| `tools/migrate_from_gas.py` | GAS 版の全データを Supabase へ移す（一度きり） |
+| `tools/make_icons.py` | `tools/icon-source.png` から PWA のアイコン一式を作り直す |
+| `workers/keepalive/` | 一時停止を防ぐ毎日のアクセスと週1回のバックアップ（Cloudflare Worker） |
+| `tests/rls_check.py` | 本番の Supabase で権限が意図どおりかを確かめる |
+| `tests/local/` | ローカルに「Supabase もどき」を立てて通しで試すためのもの |
+| `.claude/skills/` | Claude 用スキル（`taskboard-convert` = 変換、`taskboard-publish` = 反映・確認・スケッチ添付、`taskboard-watch` = 公開待ちの監視と変更の反映）。`taskboard-publish/scripts/` にプレビュー撮影（`preview.js`）と本番状態の確認（`taskboard_state.py`）を同梱 |
 | `JSON/sample_worlds2026_v2.json` | 新スキーマのサンプル |
 | `JSON/kro2025_flight{1,2,3,4}.json` | 実データ（KRO2025 Pre Worlds）のフィクスチャ |
 
 ---
 
-## セットアップ
+## セットアップ（最初に1回。プロジェクトの持ち主が行う）
 
 ### 1. GitHub Pages を有効にする
 
 リポジトリの Settings → Pages → Source: `Deploy from a branch` →
 Branch: `main` / フォルダ: `/docs` → Save。
-
 数分後に `https://ngr2000.github.io/TaskBoard/` で開けるようになる。
 
-### 2. GAS をデプロイする
+### 2. Supabase のプロジェクトを作る
 
-```bash
-clasp push
-```
+1. https://supabase.com でアカウントを作る（GitHub アカウントでも可）。Organization を1つ作る（Free）
+2. **New project**
+   - Project name: `taskboard`
+   - Database Password: Generate で自動生成し、パスワード管理アプリなどに控える（普段は使わない）
+   - Region: **Tokyo**（Northeast Asia）
+   - 「Automatically expose new tables」のような公開設定は、オンでもオフでもよい
+     （`schema.sql` が必要な公開を明示している）
+3. **SQL Editor** → New query → `supabase/schema.sql` の全文を貼って **Run**。
+   「Success. No rows returned」と出れば完了
+   （このファイルを更新した時も、同じように全文を流し直せばよい。データは消えない）
+4. **Authentication → Sign In / Providers** の「**Allow new users to sign up**」を**オフ**にして保存
+   （知らない人がアカウントを作れないようにする。メンバーは招待だけで増やす）
+5. **Authentication → URL Configuration** の **Site URL** を
+   `https://ngr2000.github.io/TaskBoard/admin/` にして保存（招待・パスワード再設定メールのリンクの行き先）
+6. **Project Settings → API Keys** で次の2つを控え、`docs/config.js` に書いてコミットする。
+   どちらも公開前提の値（読み取りしかできない）
+   - Project URL（`https://xxxx.supabase.co`）… Project Settings → Data API（または Connect ボタン）にもある
+   - **anon キー**（`eyJ` で始まる長い文字列。「Legacy API keys」のタブにある）か、
+     **publishable キー**（`sb_publishable_` で始まる）のどちらか。どちらでも動く
+   - **service_role キー・secret キーは絶対に使わない・書かない**（全権限を持つ）
 
-Apps Script エディタ → デプロイ → 新しいデプロイ → 種類「ウェブアプリ」
+### 3. メンバーを追加する（自分も含めて）
 
-- 次のユーザーとして実行: **自分**
-- アクセスできるユーザー: **全員**
+下の「メンバーの追加」の手順で、自分と、Claude 用のボットアカウントを追加する。
 
-発行された `.../exec` URL を控える。
+### 4. 一時停止を防ぐ Worker を置く
 
-### 3. 閲覧アプリに取得先を教える
+`workers/keepalive/README.md` の手順で Cloudflare に Worker を1つ置く（ダッシュボードだけで完結）。
 
-`docs/config.js` の `apiUrl` に `/exec` URL を書いてコミットする。
+---
 
-```js
-window.TASKBOARD_CONFIG = {
-  apiUrl: "https://script.google.com/macros/s/XXXXXXXX/exec",
-  ...
-};
-```
+## メンバーの追加
 
-これでクルーは `https://ngr2000.github.io/TaskBoard/` を開くだけでよくなる。
+管理画面を使えるのは、**Supabase にアカウントがあり、かつ `admins` 表にメールアドレスがある人**だけ。
+追加はプロジェクトの持ち主（または Supabase のダッシュボードを触れる人）が行う。
 
-書き換えずに使うこともできる。GAS 管理画面の「1. クルーに配るリンク」に出る
-`...?api=<exec URL>` 付きのURLを配れば同じように動く（設定はその端末に保存される）。
+1. **Authentication → Users → Add user → Send invitation** でメールアドレスを入れる
+   → 本人に招待メールが届き、リンクから管理画面でパスワードを設定する
+2. **Table Editor → admins → Insert row** で同じメールアドレスを**小文字で**入れる（`note` に名前など）
+
+外す時は、`admins` からその行を消す（書き込めなくなる）。Authentication → Users から消せばログインもできなくなる。
+
+**Claude 用のボット**も同じ手順で1人ぶん作る（例: `taskboard-bot@…`）。招待の代わりに
+Add user → Create new user でメールとパスワードを直接決めてよい（Auto Confirm をオン）。
+そのメールとパスワードは、Claude Code の環境設定で
+`TASKBOARD_BOT_EMAIL` / `TASKBOARD_BOT_PASSWORD` に入れる。**リポジトリやチャットには書かない。**
+漏れた時はボットのパスワードを変えるか、`admins` から外せばすぐ無効になる。
 
 ---
 
@@ -107,24 +143,25 @@ window.TASKBOARD_CONFIG = {
 | | A. 管理画面で手動 | B. Claude から一気に |
 |---|---|---|
 | 手順 | Claudeで変換 → 管理画面に貼り付け → 原本アップ | タスクシートを渡して「反映して」だけ |
-| 必要なもの | ブラウザだけ | `TASKBOARD_TOKEN` の設定（初回のみ） |
+| 必要なもの | ブラウザと自分のアカウント | ボットアカウントの設定（初回のみ） |
 | 向いている時 | 現地でスマホしかない時、確実に自分の目で確認したい時 | 手数を減らしたい時、原本が複数ページのPDFの時 |
 
 Bが失敗しても、Aは何も変わらず使える。**大会本番で不安ならAだけで完結する。**
 
 ### A. 入力担当 — 管理画面で手動（ブリーフィング後、電波のある場所で）
 
-1. GAS の `/exec` を開く（＝管理画面）
+1. `https://ngr2000.github.io/TaskBoard/admin/` を開いてログインする
 2. Claude にタスクシート画像を送り「**TaskBoard用JSONに変換して**」と依頼
-3. 「対象フライト」で **＋ 新しいフライトとして登録** を選ぶ（誤字の訂正など、既存フライトを
-   直す時だけ一覧からそのフライトを選ぶ）
+3. 「対象フライト」で **＋ 新しいフライトとして登録** を選ぶ（訂正の時だけ一覧からそのフライトを選ぶ。
+   カードの「編集」を押すと、今の内容がフォームに入る）
 4. 出てきたJSONを貼り付けて「登録して全クルーに反映」— ラベルは空でも
-   JSONの中身（Flight番号・Tasks番号）から自動で付く
+   JSONの中身（Flight番号・Tasks番号）から自動で付く。既存フライトの訂正でラベルを空にすると今のラベルのまま
 5. 原本画像・スケッチがあれば登録（原本は「2.」で選んでいるフライトに紐づく。
-   タスクシートが複数ページにわたる場合は、順番通りに「+ ページを追加」で1枚ずつ足す。
-   PDFのまま選んでもよい — ブラウザ内で1ページずつ画像に変換してから、通常の複数ページ原本と
-   同じ仕組みで保存する）
+   複数ページは順番通りに「+ ページを追加」で足す。PDFのまま選べば全ページを順番に追加する）
 6. 初回だけ「クルーに配るリンク」をLINEで共有。以降のフライトはこのURLのまま増えていく
+
+各フライトの「履歴」で、誰がいつ何を変えたかが見られる。タスク内容が変わった行の
+「変更前をフォームへ」を押すと、訂正前の内容をフォームに戻せる（確認して登録すれば元に戻る）。
 
 ### B. 入力担当 — Claude から一気に反映する
 
@@ -135,69 +172,66 @@ Bが失敗しても、Aは何も変わらず使える。**大会本番で不安�
 裏で動いているのは `tools/publish.py`。手で叩くこともできる。
 
 ```bash
-python3 tools/publish.py --json flight.json --original tds.pdf
+export TASKBOARD_BOT_EMAIL=... TASKBOARD_BOT_PASSWORD=...
+python3 tools/publish.py --json flight.json --original tds.pdf --key worlds2026-flight7 --label "Flight 7 (#21-#24)"
 ```
 
-- API の URL は `docs/config.js` から自動で読む
-- 原本の PDF はページごとに画像化してから、Aと同じ保存先に入る（クルー側の見え方は同じ）
-- 既存フライトを直す時は `--key <既存のkey>` を付ける。付けなければ新規フライトになる
+- 接続先は `docs/config.js` から自動で読む
+- 既存フライトを直す時は `--key <既存のkey>` を付ける。付けなければ新規フライトになる。
+  既存フライトの更新で `--label` を省くと、今のラベルのまま
 - 迷ったら `--dry-run` で送信せず内容だけ確認できる
 - 登録済みフライトに**原本だけ後から足す**場合は `--json` を省く（タスク内容とラベルには触らない）:
   `python3 tools/publish.py --key <既存のkey> --original tds.pdf`
-- **タスク別スケッチ**（図・手描き）も管理画面を開かずに直接アップロードできる。
-  `--sketch <タスク番号>:<画像パス>` を繰り返し指定する:
+- **タスク別スケッチ**（図・手描き）は `--sketch <タスク番号>:<画像パス>` を繰り返し指定する:
   `python3 tools/publish.py --key <既存のkey> --sketch 20:task20.png --sketch 22:task22.png`
-  タスクカードに出すプレビュー用の軽量サムネイルも自動で一緒に作って送る。
-
-#### 初回だけ必要な準備
-
-1. Apps Script の **プロジェクトの設定 → スクリプト プロパティ** で
-   `TASKBOARD_API_TOKEN` に32文字以上のランダムな文字列を設定する
-2. Claude Code の環境設定で環境変数 `TASKBOARD_TOKEN` に同じ値を設定する
-
-**トークンはリポジトリに置かないこと。** `docs/config.js` は GitHub Pages で公開されるので、
-そこに書くと誰でも書き込めるようになる。漏れた時はスクリプト プロパティの値を変えるだけでよく、
-古いトークンは即座に無効になる。
-
-未設定の間、`doPost` は誰も通さない（設定し忘れが素通しにならないようにしてある）。
-
-### GASとの自動連携（mainにマージしたら自動デプロイ）
-
-`.github/workflows/deploy-gas.yml` が、`main` に `コード.js` / `index.html` などが
-push（＝PRのマージ）されるたびに `clasp push` → 既存デプロイの更新までを自動で行う。
-これが動いていれば、**Apps Scriptのエディタを開いたり手で貼り付けたりする必要は無くなる**
-（「デプロイを管理→新バージョン」も含めて自動）。
-
-初回だけ、次の2つをリポジトリの **Settings → Secrets and variables → Actions** に登録する:
-
-1. **`CLASP_CREDENTIALS`** — 手元のPCで
-   ```bash
-   npm install -g @google/clasp
-   clasp login
-   ```
-   を実行してGoogleアカウントでログインすると `~/.clasprc.json` ができる。その中身をそのまま貼る
-   （clasp用のOAuthトークンなので、GASの書き込みトークン `TASKBOARD_API_TOKEN` とは別物）。
-   **`~/.clasprc.json` の形式はclaspのメジャーバージョンで変わる**ので、`clasp --version` で
-   確認したバージョンと `.github/workflows/deploy-gas.yml` の `npm install -g @google/clasp@x.y.z`
-   を必ず合わせること。ズレると `Error retrieving access token: Cannot read properties of
-   undefined (reading 'access_token')` で失敗する（現在はv3.4.1に合わせてある）。
-2. **`GAS_DEPLOYMENT_ID`** — Apps Scriptエディタの「デプロイを管理」に出ているデプロイID
-   （`clasp deployments` でも確認できる）。これを渡さないと `clasp deploy` が新しい別デプロイ
-   （＝別の `/exec` URL）を作ってしまうため、既存の本番URLを更新するには必須。
-
-`GAS_DEPLOYMENT_ID` を登録し忘れていても `CLASP_CREDENTIALS` さえあれば `clasp push` までは
-自動で走る（コードはApps Scriptプロジェクトに届くが、デプロイだけ手動で必要という状態になる）。
-ワークフローの実行結果は GitHub の「Actions」タブで確認できる。
+  タスクカードに出すプレビュー用の軽量サムネイルも自動で一緒に作る
+- 状態の確認は `python3 .claude/skills/taskboard-publish/scripts/taskboard_state.py list`
+  （`archive` / `unarchive` / `show` / `history` もある）
 
 ### クルー
 
 1. 配られたURLを開く（ホーム画面に追加しておくとアプリとして起動する）
-2. **電波のあるうちに一度「↻」を押す** — 全フライトがこの端末に保存され、圏外でも開ける
+2. **電波のあるうちに一度「↻」を押す** — 全フライトと、アーカイブしていないフライトの原本・スケッチが
+   この端末に保存され、圏外でも開ける
 3. ヘッダー下のバーでフライトを切り替える。まだ見ていない／更新されたフライトには
    赤い ● が付く。開くと消える
 4. バー右端の **📦 アーカイブ** から過去のフライトを開ける。
    **年 / 月 / 大会** で見出しをまとめ直せる
 5. タスク名の横の **?** でそのタスクのAXMERルール（和訳）が読める
+
+---
+
+## 困った時
+
+| 症状 | 原因と対処 |
+|---|---|
+| クルーのアプリに新しいフライトが出ない・「同期できませんでした」 | Supabase が一時停止しているかもしれない。ダッシュボード → プロジェクト → **Resume project** → 数分待って「↻」。キープアライブ Worker のログも確認する（`workers/keepalive/README.md`） |
+| 管理画面で「管理者として登録されていません」 | ログインはできているが `admins` にメールが無い。「メンバーの追加」の2を行う |
+| パスワードを忘れた | ログイン画面の「パスワードを忘れた」から再設定メールを送る |
+| Claude の反映で「権限がありません」 | ボットのメールが `admins` に無い |
+| Claude の反映で「ログインできませんでした」 | `TASKBOARD_BOT_EMAIL` / `TASKBOARD_BOT_PASSWORD` が違う |
+| 権限が正しいか不安 | `python3 tests/rls_check.py`（本番に確認用フライトを1件作って消す） |
+
+Supabase の無料プランは **1週間ほぼアクセスが無いと一時停止**する。キープアライブ Worker が
+毎日アクセスするので普段は止まらない。止まる約1週間前にはプロジェクトの持ち主へ警告メールも届く。
+止まってもデータは消えない（1年以内なら元どおりに戻せる）。
+
+---
+
+## GAS からの移行
+
+GAS 版からの切り替えは次の順で行う（一度きり）。
+
+1. 「セットアップ」の 2〜3 を済ませる
+2. `python3 tools/migrate_from_gas.py` — GAS の公開読み取りAPIから全フライト・原本・スケッチを読み、
+   Supabase に書き込み、最後に中身（画像はバイト単位）を突き合わせる。何度流しても同じ結果になる
+3. `python3 tests/rls_check.py` で権限を確認する
+4. `docs/config.js` を切り替えて main にマージする。クルーの端末は Service Worker の仕組み上、
+   **2回目の起動から**新しい版になる（1回目は古い版が開き、裏で更新される）
+5. `workers/keepalive/` を置く
+6. 1大会ぶん問題なく動いたら、GAS 一式（`コード.js`・ルートの `index.html`・`appsscript.json`・
+   `.clasp*`・`.github/workflows/deploy-gas.yml`・`tests/*.js` の GAS 用テスト）を消す。
+   それまでは GAS を読み取り専用の控えとして残しておく
 
 ---
 
@@ -382,9 +416,9 @@ push（＝PRのマージ）されるたびに `clasp push` → 既存デプロ�
 
 - クルー側は同期のたびに「フライト一覧（ラベル・日付・更新時刻）」だけをまず取得し、
   各フライトの中身は表示中のフライトを優先しながら裏で1件ずつ取得して端末に保存する
-  （画像と違って軽いテキストなので、基本的に全フライト分をまとめて先読みする）。
+  （軽いテキストなので、基本的に全フライト分をまとめて先読みする）。
   そのため一度同期しておけば、圏外でもどのフライトへも切り替えられる。
-- フライトの見分けは GAS 側の `key`（例: `flight-3`）。管理画面でラベルを変えても
+- フライトの見分けは `key`（例: `worlds2026-flight3`）。ラベルを変えても
   同じフライトとして扱われる。既存の `key` で再登録すると上書き（訂正）になる。
 - 「JSONを直接読み込む（この端末だけ）」で読み込んだ内容は一時フライトとして
   バーに加わるが、次に「↻」で同期すると消える（あくまで緊急用）。
@@ -395,55 +429,40 @@ push（＝PRのマージ）されるたびに `clasp push` → 既存デプロ�
 クルー側の切替バーを常に「今のフライト」だけに保てる。
 
 - **管理画面の「3. 登録済みフライト」**の各カードにある「アーカイブ」を押す。戻すのも同じ場所
+  （Claude からは `taskboard_state.py archive <key>` / `unarchive <key>`）
 - アーカイブしたフライトはクルー側の切替バーから外れ、バー右端の **📦 アーカイブ** に入る
 - アーカイブ画面では **年 / 月 / 大会** の3通りに見出しをまとめ直せる
 - 日付は `01.05.2025 AM` `2026.8.8` `2026年8月20日（木）AM` などバラバラなので、
   数字の並びから年・月を判定する。判定できないものは推測せず「日付不明」にまとめる
 - アーカイブ済みは同期時に先読みしない（件数が増えても同期が重くならないように）。
   アーカイブ前に端末へ保存済みなので、通常は圏外でも開ける
-- **訂正のために再登録してもアーカイブ状態は維持される**
+- **訂正のために再登録してもアーカイブ状態は維持される**。アーカイブしても「更新あり」の ● は付かない
 
 ## 制限・注意
 
 - 初回だけは通信が必要。**一度も開いていない端末は圏外では起動できない。**
   大会前にクルー全員に一度開いてもらうこと。
-- 原本画像・スケッチは端末の localStorage に保存する。容量上限（およそ5MB）を
-  超えた分は保存されず、その画像だけ毎回取得しにいく（表示自体はできる）。
 - `docs/` 以下を更新したら `docs/sw.js` の `CACHE_VERSION` を上げること。
-  上げないと古いキャッシュが残る。
-- GAS のデプロイを作り直して `/exec` URL が変わった場合は `docs/config.js` も更新する。
-- 大会全体のリセット（全フライト削除）は管理画面の「6.」からのみ行える。
-  クルー側アプリには破壊的な操作は置いていない。
-- **管理画面は URL を知っていれば誰でも開ける。** クルー用アプリが匿名で読む必要があるため、
-  デプロイの「アクセスできるユーザー」は「全員」にせざるを得ず、`/exec` URL は
-  `docs/config.js` 経由で公開されている。守りたい場合はスクリプト プロパティで
-  `TASKBOARD_ADMIN_PASS` に合言葉を設定する（下記）。
-- 原本のPDF変換はCDNから読み込む変換ライブラリ（pdf.js）に依存するため、管理画面側は
+  上げないと古いキャッシュが残る（管理画面 `docs/admin/` はキャッシュしないので不要）。
+- 削除は管理画面からのみ。フライトを消すと原本・スケッチの画像も消える（行の中身は変更履歴に残る）。
+  普段はアーカイブを使う。クルー側アプリには破壊的な操作は置いていない。
+- 原本のPDF変換は管理画面側でCDNから読み込む変換ライブラリ（pdf.js）に依存するため、
   通信できる状態で行う必要がある（クルー側アプリは変換済みの画像しか受け取らないので影響しない）。
 - **アイコンを変えた後は、クルーの端末で一度ホーム画面から削除して追加し直す必要がある。**
   iOSは追加した時点のアイコンを保持し、あとから差し替えても更新されない。
 
-## 管理画面を合言葉で守る
+## 開発者向け: ローカルで試す
 
-`/exec` は「アクセスできるユーザー: 全員」でデプロイされている。クルー用アプリが
-匿名で読むために必須の設定だが、その結果 **URL を知っている人は誰でも管理画面を開き、
-登録・削除・全リセットまで実行できる**。URL は `docs/config.js` として公開されている。
+本物の Supabase を触らずに、ローカルの Postgres と PostgREST で通しで試せる。
 
-クルーに配ったリンクを変えずに守るため、URL ではなく合言葉で守る。
+```bash
+supabase/test/run.sh                  # schema.sql の権限・履歴のテスト（PGHOST 等で接続先を指定）
+POSTGREST=/path/to/postgrest tests/local/start.sh   # Supabase もどきを 127.0.0.1:54321 に立てる
+```
 
-1. Apps Script の **プロジェクトの設定 → スクリプト プロパティ** で
-   `TASKBOARD_ADMIN_PASS` に合言葉を設定する（推測されにくい12文字以上を推奨）
-2. 入力担当が管理画面を開くと1回だけ合言葉を聞かれる。端末に記憶されるので次回からは聞かれない
-
-- **設定するまでは今までどおり誰でも開ける。** デプロイした瞬間に入力担当が
-  締め出される事故を防ぐため。未設定の間は管理画面に警告が出る
-- 合言葉を変える・やめる時も同じスクリプト プロパティを書き換えるだけ。
-  忘れた時もそこで確認できる
-- 合言葉を設定・変更する関数はあえて置いていない。`google.script.run` は末尾に `_` が付かない
-  全ての関数を呼べるので、そういう関数を置いた時点で URL を知っている人が合言葉を
-  消せてしまい、この仕組みが意味を失うため
-- 画面を隠すだけでなく、書き込み系の関数そのものが入口で合言葉を確認している
-  （ブラウザのコンソールから `google.script.run.resetAllData()` を直接叩かれても弾ける）
+`start.sh` が表示する URL と anon キーを `TASKBOARD_SUPABASE_URL` / `TASKBOARD_SUPABASE_ANON_KEY` に入れると、
+tools/*.py はそちらを向く（ユーザーは `admin@example.com` / `bot@example.com`、パスワードは `password`）。
+アプリを試す時は `docs/` を別の場所に写し、`config.js` だけ同じ値に書き換えて配信する。
 
 ## 参考
 

@@ -1,16 +1,14 @@
 /**
  * TaskBoard PWA 設定
  *
- * apiUrl に GAS ウェブアプリの /exec URL を入れてコミットすると、
- * クルーは https://ngr2000.github.io/TaskBoard/ を開くだけで設定不要になる。
- *
- * 空のままでも動く。その場合はアプリ内の「設定」画面で URL を入力すると
- * その端末の localStorage に保存される（自分だけ）。
- *
- * 優先順位:  ?api=... （URLパラメータ）  >  localStorage  >  ここの apiUrl
+ * Supabase の URL と anon キー（どちらも公開前提の値）。クルー用アプリ・管理画面
+ * （docs/admin/）・tools/*.py が共通でここを読む。
+ * anon キーでできるのは読み取りだけで、書き込みはログインした管理者に限られる
+ * （supabase/schema.sql の RLS）。
  */
 window.TASKBOARD_CONFIG = {
-  apiUrl: "https://script.google.com/macros/s/AKfycbzRIZMR0wbzGXpU2LdYvP543ur6-odsQx4EpEc5yB-SqDrxP8hQ3Xc1MIDNLcrsI_1U5Q/exec",
+  supabaseUrl: "https://qlcslkvpudelhmcnjbcf.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsY3Nsa3ZwdWRlbGhtY25qYmNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzIwNjgsImV4cCI6MjEwNjk0ODA2OH0.Hsza62zZzyO671gEk6cuDLIBriOyc6eUSVu8Na9kfKY",
   appName: "TaskBoard",
   eventName: "26th FAI World Hot Air Balloon Championship 2026"
 };
