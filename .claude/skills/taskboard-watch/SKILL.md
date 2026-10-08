@@ -76,6 +76,8 @@ The loop is the same shape as Steps 1–4 — a cron trigger opens the window, t
    This keeps the member's label and photos and clears `awaitingConversion` (the new JSON doesn't carry it). Run `pending` again to confirm it's gone.
 3. Report to the user what was converted and anything you were unsure about. The user may not be at the venue, so publishing doesn't wait for their go-ahead (they chose this mode for exactly that reason) — but say clearly which values came from a hard-to-read photo so a wrong one can be corrected quickly.
 
+**Sketches come along on the same registration.** The member is told to put goal sketches / maps after the task-sheet pages in the same upload. When a page (or a diagram inside the sheet) is clearly for one task — it says "Task 3", or that task says "see attached sheet/sketch" and only one page fits — attach it with `--sketch <taskNo>:<image>` on the same `publish.py` call (whole page as-is, or crop the diagram with PyMuPDF). A drawing you can't tie to a task stays as an original page only; say so in the report. `pip install -q pymupdf` first if the session doesn't have it — `--sketch` needs it.
+
 A photo too blurry to read reliably is not a reason to guess: publish what is certain, put "原本参照" for the unreadable value, and tell the user which value it was.
 
 ## Amendments to an already-registered flight — the user relays them, not WebFetch

@@ -9,6 +9,9 @@
 window.TASKBOARD_CONFIG = {
   supabaseUrl: "https://qlcslkvpudelhmcnjbcf.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsY3Nsa3ZwdWRlbGhtY25qYmNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzIwNjgsImV4cCI6MjEwNjk0ODA2OH0.Hsza62zZzyO671gEk6cuDLIBriOyc6eUSVu8Na9kfKY",
+  // 写真だけの速報登録のあと、変換係（Claude のルーティン）を起こす Worker の URL。
+  // 空なら起こさない（決めた時間帯の定期確認だけになる）。workers/keepalive/README.md 参照
+  notifyUrl: "",
   appName: "TaskBoard",
   eventName: "26th FAI World Hot Air Balloon Championship 2026"
 };

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "basicInfo": {
+    "competitionName": "Ichinoseki / Hiraizumi Balloon Festival 2025",
+    "date": "2025.10.10 AM",
+    "fields": [
+      { "label": "Event", "value": "2025 Hot Air Balloon Honda Grand Prix - 2nd round -" },
+      { "label": "Date / Time (as printed)", "value": "Friday 10-Oct-2025 AM, 0520" },
+      { "label": "Task", "value": "#1, #2, #3, #4" },
+      { "label": "Task / Marker", "value": "In Order" },
+      { "label": "Launch Period", "value": "Green Flag + 30 min.", "valueJa": "グリーンフラッグから30分間" },
+      { "label": "Launch Reqmt", "value": "Common Launch Area", "valueJa": "共通離陸エリアから離陸" },
+      { "label": "CLP", "value": "CLP 1380 - 0950" },
+      { "label": "PZ", "value": "All PZs in Force" },
+      { "label": "Observer", "value": "not applicable" },
+      { "label": "Solo Flight", "value": "Not Required" },
+      { "label": "Search Period", "value": "not applied" },
+      { "label": "Sunrise / Sunset", "value": "0545 / 1650" },
+      { "label": "QNH", "value": "1021hPa" },
+      { "label": "Next Briefing", "value": "1400, at I-DOME", "valueJa": "14:00 アイドームにて" }
+    ],
+    "notes": "Task 1 HWZ and Task 2 PDG may be flown in either order.\nTask 2 PDG Goals must be at least 500m from Task 1 HWZ Targets.",
+    "notesJa": "Task 1 HWZ と Task 2 PDG はどちらの順で飛んでもよい。\nTask 2 PDG のゴールは、Task 1 HWZ のターゲットから500m以上離すこと。"
+  },
+  "tasks": [
+    {
+      "taskNo": "1",
+      "taskId": "HWZ",
+      "ruleNo": "15.3",
+      "markerColor": "Pink",
+      "markerDrop": "Free",
+      "scoringPeriodEnd": "0800",
+      "scoringArea": "Entire Contest Area",
+      "targets": [
+        { "name": "yellow target", "coordinates": "1523/0769", "mma": "R70m" },
+        { "name": "red target", "coordinates": "1636/0523", "mma": "R65m" }
+      ],
+      "loggerMarker": "1"
+    },
+    {
+      "taskNo": "2",
+      "taskId": "PDG",
+      "ruleNo": "15.1",
+      "scoringPeriodEnd": "0800",
+      "scoringArea": "Entire Contest Area",
+      "fields": [
+        { "label": "method of declaration", "value": "Log Goal 1, 2 and 3, Before take off", "valueJa": "ロガーゴール1・2・3で、離陸前に宣言" },
+        { "label": "number of goals permitted", "value": "3" },
+        { "label": "goals available for declarations", "value": "Any map coordinate (4/4 format) with Altitude", "valueJa": "高度付きの任意の地図座標（4/4形式）" },
+        { "label": "minimum and maximum distances of goals from CLP", "value": "min. 1 km, max. 7 km" }
+      ],
+      "loggerMarker": "2"
+    },
+    {
+      "taskNo": "3",
+      "taskId": "JDG",
+      "ruleNo": "15.2",
+      "markerColor": "Blue",
+      "markerDrop": "GMD",
+      "scoringPeriodEnd": "0830",
+      "scoringArea": "Entire Contest Area",
+      "targets": [
+        { "name": "white target", "coordinates": "1806/0288", "mma": "R80m" }
+      ],
+      "loggerMarker": "3"
+    },
+    {
+      "taskNo": "4",
+      "taskId": "FON",
+      "ruleNo": "15.5",
+      "scoringPeriodEnd": "0845",
+      "scoringArea": "Entire Contest Area",
+      "fields": [
+        { "label": "method of declaration", "value": "Log Goal 4, Before Mark of Task 3", "valueJa": "ロガーゴール4で、Task 3 のマーク前に宣言" },
+        { "label": "number of goals permitted", "value": "1" },
+        { "label": "goals available for declarations", "value": "Any map coordinate (4/4 format) with Altitude", "valueJa": "高度付きの任意の地図座標（4/4形式）" },
+        { "label": "minimum and maximum distance between previous mark and declared goal", "value": "min. 1 km, max. 5 km" }
+      ],
+      "loggerMarker": "4"
+    }
+  ]
+}
