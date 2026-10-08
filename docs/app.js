@@ -498,10 +498,11 @@
   }
 
   /** state.flights は新しい順（登録が新しいフライトが先頭）に揃えてある前提 */
+  /** 通常フライトが無ければ何も選ばない。アーカイブ済みはクルーがアーカイブ画面から開いた時だけ表示する */
   function pickActiveFlight() {
     var list = activeFlights();
     if (state.activeFlight && state.flights.some(function (f) { return f.key === state.activeFlight; })) return;
-    state.activeFlight = list.length ? list[0].key : (state.flights.length ? state.flights[0].key : '');
+    state.activeFlight = list.length ? list[0].key : '';
   }
 
   function restoreFromCache() {
@@ -519,6 +520,10 @@
         state.flightData[f.key] = { raw: raw, data: normalizeData(raw), updatedAt: cached.updatedAt };
       } catch (e) { /* 壊れたキャッシュは無視 */ }
     });
+    // 前回アーカイブ済みのフライトを開いたまま閉じていても、起動し直したら今のフライトに戻す
+    // （アーカイブ済みはアーカイブ画面から開いた時だけ表示する）
+    var last = state.flights.filter(function (f) { return f.key === state.activeFlight; })[0];
+    if (last && last.archived) state.activeFlight = '';
     pickActiveFlight();
     if (state.activeFlight) markViewed(state.activeFlight);
   }
@@ -746,6 +751,14 @@
         (configured()
           ? 'まだフライトが登録されていません。<br>ブリーフィング後に入力担当が登録すると、ここに表示されます。<br><br>「↻」で再同期できます。'
           : 'データの取得先が未設定です。<br>右上の ⚙ から設定してください。') +
+        '</div></div>';
+      return html;
+    }
+
+    if (!state.activeFlight) {
+      html += '<div class="center-note">現在表示するフライトはありません。<br>' +
+        '新しいタスクシートが登録されると、ここに表示されます（「↻」で確認）。' +
+        (archivedFlights().length ? '<br><br>過去のフライトは上の「📦 アーカイブ」から開けます。' : '') +
         '</div></div>';
       return html;
     }

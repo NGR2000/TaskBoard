@@ -13,5 +13,5 @@ window.TASKBOARD_CONFIG = {
   // 空なら起こさない（決めた時間帯の定期確認だけになる）。workers/keepalive/README.md 参照
   notifyUrl: "https://taskboard-keepalive.rnogamigm.workers.dev",
   appName: "TaskBoard",
-  eventName: "26th FAI World Hot Air Balloon Championship 2026"
+  eventName: ""
 };
