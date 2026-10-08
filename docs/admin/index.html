@@ -399,6 +399,8 @@ function renderFlights() {
             : '<button class="btn-secondary btn-inline" data-act="archive-flight" data-key="' + esc(f.key) + '">アーカイブ</button>') +
           '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '">削除</button>' +
           '<button class="btn-link" data-act="history" data-key="' + esc(f.key) + '">履歴</button>' +
+          (f.data && f.data.awaitingConversion && CFG.notifyUrl
+            ? '<button class="btn-small" data-act="request-conversion" data-key="' + esc(f.key) + '">変換を依頼</button>' : '') +
         '</div>' +
       '</div>' +
       (openHistory === f.key ? '<div class="history" id="history-' + esc(safeSegment(f.key)) + '">読み込み中…</div>' : '') +
@@ -567,10 +569,33 @@ function quickRegister() {
     .then(function (pages) {
       el('quickLabel').value = '';
       el('quickFiles').value = '';
-      msg('quickMsg', '✅ 「' + esc(label) + '」を登録しました（原本 ' + pages + ' ページ）。クルーのアプリで「↻」すると出ます。\n変換は Claude が行います。', 'ok');
+      var done = '✅ 「' + esc(label) + '」を登録しました（原本 ' + pages + ' ページ）。クルーのアプリで「↻」すると出ます。';
+      msg('quickMsg', done, 'ok');
+      return requestConversion(key).then(function (note) { msg('quickMsg', done + '\n' + note, 'ok'); });
     })
     .catch(function (e) { msg('quickMsg', '失敗: ' + esc(e.message) + '\n途中まで登録された場合は「3. 登録済みフライト」で確認してください。', 'err'); return refresh(); })
     .then(function () { el('quickBtn').disabled = false; });
+}
+
+/**
+ * 変換係（Claude のルーティン）を起こす。Worker がこのメンバーのログインを確かめてから起動する。
+ * 失敗しても登録自体は済んでいるので、結果は文で返すだけにする。
+ */
+function requestConversion(key) {
+  if (!CFG.notifyUrl) return Promise.resolve('変換は Claude が決まった時間帯に行います。');
+  return sb.auth.getSession().then(function (res) {
+    var token = res.data.session && res.data.session.access_token;
+    return fetch(CFG.notifyUrl.replace(/\/$/, '') + '/notify', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key })
+    });
+  }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }); })
+    .then(function (out) {
+      return out.ok ? '🤖 Claude に変換を依頼しました。数分でタスクごとの表示に切り替わります。'
+        : '⚠️ 変換の依頼に失敗しました（' + esc(out.error) + '）。「3. 登録済みフライト」の「変換を依頼」で再度試せます。';
+    })
+    .catch(function () { return '⚠️ 変換の依頼に失敗しました（通信エラー）。「3. 登録済みフライト」の「変換を依頼」で再度試せます。'; });
 }
 
 function saveJson() {
@@ -780,6 +805,10 @@ document.addEventListener('click', function (ev) {
     case 'delete-flight': deleteFlight(key); break;
     case 'archive-flight': setArchived(key, true); break;
     case 'unarchive-flight': setArchived(key, false); break;
+    case 'request-conversion':
+      msg('jsonMsg', '変換を依頼しています…', 'info');
+      requestConversion(key).then(function (note) { msg('jsonMsg', note, 'info'); });
+      break;
     case 'history': openHistory = openHistory === key ? '' : key; renderFlights(); break;
     case 'load-version': loadVersion(Number(node.getAttribute('data-id'))); break;
     case 'delete-sketch': delSketch(node.getAttribute('data-flightkey'), node.getAttribute('data-taskno')); break;

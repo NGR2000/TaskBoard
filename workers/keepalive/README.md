@@ -27,6 +27,26 @@ Supabase の無料プランは、**1週間ほぼアクセスが無いとプロ�
 
    ※ 2つ目の式は `worker.js` の `BACKUP_CRON` と一字一句同じにすること。違うとバックアップが動きません。
 
+## 写真の速報登録のあと、変換係（Claude）を自動で起こす
+
+管理画面の「📷 写真だけで速報登録」が終わると、管理画面がこの Worker の `/notify` を呼び、
+Worker が Claude Code のルーティン「TaskBoard 変換係」を起動する（プッシュ型）。
+Worker は呼んできた人が管理メンバーか（Supabase の `is_admin`）と、そのフライトが本当に変換待ちかを確かめてから起動する。
+
+1. **ルーティンのトークンを発行する**
+   claude.ai/code/routines →「TaskBoard 変換係」→ 名前の横のメニュー → **Edit** →
+   「Select a trigger」→ **Add another trigger** → **API** →
+   表示された **URL を控え**、**Generate token** でトークンを発行してコピー（一度しか表示されない）
+   - 同じ Edit 画面で、**Repositories** に `NGR2000/TaskBoard` を加えておく（変換ルールのスキルが読み込まれる）
+2. **Worker に登録する**（Settings → Variables and Secrets → Add）
+   - `ROUTINE_FIRE_URL` … 1 の URL（種類は Text）
+   - `ROUTINE_TOKEN` … 1 のトークン（種類は **Secret**。チャットや GitHub には絶対に貼らない）
+3. **管理画面に Worker の場所を教える**
+   `docs/config.js` の `notifyUrl` に Worker の URL（`https://taskboard-keepalive.<アカウント>.workers.dev`）を書いてコミット
+
+`notifyUrl` が空の間は起こさない（管理画面には「決まった時間帯に変換します」と出る）。
+起動できなかった時は、管理画面の「3. 登録済みフライト」の「変換を依頼」で再度呼べる。
+
 ## 動いているかの確認
 
 - Worker の URL（`https://taskboard-keepalive.<アカウント>.workers.dev`）をブラウザで開くと、
