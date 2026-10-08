@@ -102,6 +102,20 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
 
 <div class="wrap hidden" id="mainScreen">
 
+  <h2>📷 写真だけで速報登録（会場用）</h2>
+  <div class="hint" style="margin-top:0">
+    タスクシートの写真を撮って登録すると、クルーのアプリにすぐ原本が出ます（「変換待ち」と表示）。
+    タスクごとの表示への変換は、あとから Claude が行います。複数ページは<b>ページ順に</b>まとめて選んでください。
+  </div>
+  <label class="field">大会名</label>
+  <input type="text" id="quickEvent" placeholder="一関バルーンフェスティバル 2026">
+  <label class="field">ラベル（クルーのアプリに出る名前）</label>
+  <input type="text" id="quickLabel" placeholder="Flight 1">
+  <label class="field">タスクシートの写真（PDFも可）</label>
+  <input type="file" id="quickFiles" accept="image/*,application/pdf" multiple style="font-size:14px;width:100%">
+  <button class="btn btn-primary" style="margin-top:10px" id="quickBtn" onclick="quickRegister()">登録してクルーに出す</button>
+  <div id="quickMsg"></div>
+
   <h2>1. クルーに配るリンク</h2>
   <div class="share">
     このURLをLINEで共有してください。フライトはアプリ内で切り替えるので、配り直す必要はありません。
@@ -312,6 +326,7 @@ function enter(session) {
     }
     show('mainScreen');
     el('shareUrl').textContent = shareUrl();
+    try { el('quickEvent').value = localStorage.getItem('tb.admin.quickEvent') || ''; } catch (e) { /* 無くても動く */ }
     refresh();
   });
 }
@@ -373,7 +388,8 @@ function renderFlights() {
     return '<div class="flight-card' + (f.key === editingKey ? ' editing' : '') + (f.archived_at ? ' archived' : '') + '">' +
       '<div class="flight-head">' +
         '<div><div class="flight-label">' + esc(f.label) +
-          (f.archived_at ? '<span class="badge-archived">アーカイブ済み</span>' : '') + '</div>' +
+          (f.archived_at ? '<span class="badge-archived">アーカイブ済み</span>' : '') +
+          (f.data && f.data.awaitingConversion ? '<span class="badge-archived" style="background:#fff4d6;color:#8a5a00">⏳ 変換待ち</span>' : '') + '</div>' +
         '<div class="flight-sub">' + esc(f.date) + '　' + tasks.length + 'タスク　原本' + (f.images || []).length + 'ページ</div>' +
         '<div class="flight-sub">最終更新: ' + esc(fmt(ch ? ch.at : f.updated_at)) + (ch ? '（' + esc(who(ch.actor)) + '）' : '') + '</div></div>' +
         '<div class="flight-actions">' +
@@ -514,6 +530,49 @@ function editFlight(key) {
   msg('jsonMsg', '今の内容を読み込みました。直して「登録して全クルーに反映」を押すと上書きされます。', 'info');
 }
 
+/**
+ * 写真だけで速報登録する。タスクは空のまま awaitingConversion を立てて登録し、
+ * 原本ページを足す。変換は後から Claude（taskboard-watch）が同じ key に上書きして行う。
+ */
+function quickRegister() {
+  var event = el('quickEvent').value.trim();
+  var label = el('quickLabel').value.trim();
+  var files = Array.prototype.slice.call(el('quickFiles').files || []);
+  if (!label) { msg('quickMsg', 'ラベルを入れてください（例: Flight 1）', 'err'); return; }
+  if (!files.length) { msg('quickMsg', '写真を選んでください', 'err'); return; }
+  try { localStorage.setItem('tb.admin.quickEvent', event); } catch (e) { /* 覚えられなくても動く */ }
+  var key = slugify((event ? event + ' ' : '') + label);
+  if (flights.some(function (f) { return f.key === key; })) {
+    msg('quickMsg', '同じ名前のフライトがもうあります。ラベルを変えてください（例: Flight 1 PM）', 'err');
+    return;
+  }
+  var now = new Date();
+  var date = now.getFullYear() + '.' + (now.getMonth() + 1) + '.' + now.getDate() + (now.getHours() < 12 ? ' AM' : ' PM');
+  var data = { schemaVersion: 2, awaitingConversion: true, basicInfo: { competitionName: event, date: date, fields: [] }, tasks: [] };
+  el('quickBtn').disabled = true;
+  msg('quickMsg', '登録中…', 'info');
+  sb.from('flights').insert({ key: key, label: label, date: date, data: data, images: [] }).select().then(must)
+    .then(function () { editingKey = key; return refresh(); })
+    .then(function () {
+      var chain = Promise.resolve(), pages = 0;
+      files.forEach(function (file) {
+        chain = chain.then(function () {
+          var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+          return (isPdf ? uploadPdf(file, 'quickMsg') : uploadImageFile(file, 'quickMsg'))
+            .then(function (n) { pages += n; return refresh(); });
+        });
+      });
+      return chain.then(function () { return pages; });
+    })
+    .then(function (pages) {
+      el('quickLabel').value = '';
+      el('quickFiles').value = '';
+      msg('quickMsg', '✅ 「' + esc(label) + '」を登録しました（原本 ' + pages + ' ページ）。クルーのアプリで「↻」すると出ます。\n変換は Claude が行います。', 'ok');
+    })
+    .catch(function (e) { msg('quickMsg', '失敗: ' + esc(e.message) + '\n途中まで登録された場合は「3. 登録済みフライト」で確認してください。', 'err'); return refresh(); })
+    .then(function () { el('quickBtn').disabled = false; });
+}
+
 function saveJson() {
   var parsed;
   try {
@@ -632,9 +691,9 @@ function uploadImage(input) {
     .catch(function (e) { return refresh().then(function () { msg('imageMsg', '保存に失敗: ' + esc(e.message), 'err'); }); });
 }
 
-function uploadImageFile(file) {
+function uploadImageFile(file, box) {
   var key = editingKey, page = (currentFlight().images || []).length + 1;
-  msg('imageMsg', '圧縮して保存中…', 'info');
+  msg(box || 'imageMsg', '圧縮して保存中…', 'info');
   return compressImage(file, PAGE_LONG_EDGE, PAGE_QUALITY)
     .then(function (blob) { return upload('originals/' + safeSegment(key) + '/' + page + '-' + version() + '.jpg', blob); })
     .then(function (path) { return appendPages(key, [path]); })
@@ -642,19 +701,20 @@ function uploadImageFile(file) {
 }
 
 /** PDF はブラウザ内で1ページずつ画像に描画してから上げ、最後にまとめてフライトに足す */
-function uploadPdf(file) {
+function uploadPdf(file, box) {
+  box = box || 'imageMsg';
   if (typeof pdfjsLib === 'undefined') {
     return Promise.reject(new Error('PDFの読み込みライブラリを取得できませんでした。通信状態を確認してもう一度お試しください'));
   }
   var key = editingKey, start = (currentFlight().images || []).length;
-  msg('imageMsg', 'PDFを読み込み中…', 'info');
+  msg(box, 'PDFを読み込み中…', 'info');
   return file.arrayBuffer().then(function (buf) {
     return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   }).then(function (pdf) {
     var paths = [], chain = Promise.resolve();
     for (var n = 1; n <= pdf.numPages; n++) (function (pageNum) {
       chain = chain.then(function () {
-        msg('imageMsg', 'ページ' + pageNum + ' / ' + pdf.numPages + ' を保存中…', 'info');
+        msg(box, 'ページ' + pageNum + ' / ' + pdf.numPages + ' を保存中…', 'info');
         return pdf.getPage(pageNum).then(function (page) {
           var raw = page.getViewport({ scale: 1 });
           var viewport = page.getViewport({ scale: Math.min(2, PAGE_LONG_EDGE / Math.max(raw.width, raw.height)) });

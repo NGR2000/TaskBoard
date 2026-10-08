@@ -6,8 +6,10 @@
   python3 taskboard_state.py unarchive <key>  アーカイブを戻す
   python3 taskboard_state.py history <key>    そのフライト（とスケッチ）の変更履歴
   python3 taskboard_state.py show <key> [out.json]  登録済みの JSON を表示（ファイルに保存）
+  python3 taskboard_state.py pending [dir]    写真だけで速報登録された「変換待ち」のフライト。
+                                              dir を付けると原本を dir/<key>/1.jpg, 2.jpg… に保存する
 
-接続先は docs/config.js（tools/publish.py と同じ）。list と show はログイン不要、
+接続先は docs/config.js（tools/publish.py と同じ）。list・show・pending はログイン不要、
 それ以外は TASKBOARD_BOT_EMAIL / TASKBOARD_BOT_PASSWORD でログインする。
 """
 import datetime
@@ -54,6 +56,25 @@ def cmd_show(db, key, out):
         print(text)
 
 
+def cmd_pending(db, out_dir):
+    rows = db.select('flights', 'select=key,label,date,images,created_at&data->>awaitingConversion=eq.true'
+                     '&archived_at=is.null&order=created_at.asc')
+    if not rows:
+        print('変換待ちのフライトはありません')
+        return
+    for f in rows:
+        print('%s | %s | %s | 原本 %d ページ | 登録 %s' % (f['key'], f['label'], f['date'], len(f['images']),
+                                                     f['created_at'][:16].replace('T', ' ')))
+        if out_dir:
+            d = os.path.join(out_dir, f['key'])
+            os.makedirs(d, exist_ok=True)
+            for i, path in enumerate(f['images'], start=1):
+                dest = os.path.join(d, '%d%s' % (i, os.path.splitext(path)[1] or '.jpg'))
+                with open(dest, 'wb') as fh:
+                    fh.write(db.download(path))
+                print('  → ' + dest)
+
+
 def cmd_archive(db, key, archived):
     db.login()
     value = datetime.datetime.now(datetime.timezone.utc).isoformat() if archived else None
@@ -83,11 +104,14 @@ def cmd_history(db, key):
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ('list', 'archive', 'unarchive', 'history', 'show'):
+    if not args or args[0] not in ('list', 'archive', 'unarchive', 'history', 'show', 'pending'):
         sys.exit(__doc__)
     db = Client()
     if args[0] == 'list':
         cmd_list(db)
+        return
+    if args[0] == 'pending':
+        cmd_pending(db, args[1] if len(args) > 1 else '')
         return
     if len(args) < 2:
         sys.exit('key を指定してください')

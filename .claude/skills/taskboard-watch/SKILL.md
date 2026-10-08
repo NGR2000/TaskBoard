@@ -8,7 +8,7 @@ description: Watches a competition's watchmefly.net (or similar) event page on a
 A crew member is away from the venue (often in a different country/timezone) and needs to know the moment a task sheet goes up, or the moment something on an *already-registered* sheet changes, without babysitting a browser tab themselves. This skill is the polling loop around `taskboard-convert` + `taskboard-publish`; it doesn't duplicate their logic, it just knows when to call them.
 
 Two things are worth handling, but they run on very different triggers:
-1. **A new sheet** — a flight hasn't been published yet. This is the scheduled polling loop (Steps 1–4 below): 5-minute checks starting an hour before the next briefing.
+1. **A new sheet** — a flight hasn't been published yet. This is the scheduled polling loop (Steps 1–4 below): 5-minute checks starting an hour before the next briefing. For paper-only events where a member posts photos to TaskBoard, the same loop watches TaskBoard instead — see "Events with no web page".
 2. **A change to a sheet already in TaskBoard** — this happened for real: two tasks on a registered Slovak Balloon Cup flight were cancelled *after* the flight was already converted and live. It turns out competitions announce this kind of thing verbally at briefings, not as a timestamped status on the event page — so this is **user-instructed, not polled for**. See "Amendments to an already-registered flight" below for the actual trigger and workflow.
 
 ## Why this is a scheduled loop, not a sleep loop
@@ -63,6 +63,20 @@ Don't rely on "see my last message" — write the whole thing again. This is che
 4. **Nothing new**: one short line to the user (what time, next check when) and reschedule with the same self-contained message, refreshed baseline timestamp. Don't editorialize further — a string of short "まだ変化なし" is the correct texture for a watch like this, the user does not want a paragraph every 10 minutes.
 5. **Found it**: this is a live hand-off into `taskboard-convert` then `taskboard-publish` — download the PDF (URL-encode spaces), convert, render the preview, check for key collisions, publish, verify with `taskboard_state.py list`, then report. If the user's original request already said what to do once found ("反映したい", "アップして"), that's your go-ahead — don't re-ask before publishing, but still surface anything you're unsure about in the conversion, same as any other publish job.
 6. Whether idle or found, this is the point to notice if a write fails. A connection error can be retried once; a login or permission error won't clear on retry — stop and tell the user (bot credentials, or the bot missing from `admins`).
+
+## Events with no web page — watch TaskBoard itself for photo-only flights
+
+Some competitions (e.g. 一関) hand out task sheets on paper only. A member at the venue then uses the admin page's「📷 写真だけで速報登録」: it creates the flight with the photos as original pages, `tasks: []`, and `data.awaitingConversion: true`. The crew already sees the photos (with a "変換中" banner); your job is to turn them into task cards.
+
+The loop is the same shape as Steps 1–4 — a cron trigger opens the window, then self-scheduled `send_later` checks every 1–2 minutes until the cutoff — but each firing checks TaskBoard instead of a web page:
+
+1. `python3 <skill-dir>/../taskboard-publish/scripts/taskboard_state.py pending /abs/scratch/pending` — lists flights awaiting conversion and saves their photos as `<dir>/<key>/1.jpg, 2.jpg…`. "変換待ちのフライトはありません" means nothing to do this round.
+2. For each one: convert the photos with `taskboard-convert` (photo rules apply — read carefully, list uncertainties), preview with `preview.js`, then publish **onto the same key without `--original` and without `--label`**:
+   `python3 tools/publish.py --json /abs/converted.json --key <key>`
+   This keeps the member's label and photos and clears `awaitingConversion` (the new JSON doesn't carry it). Run `pending` again to confirm it's gone.
+3. Report to the user what was converted and anything you were unsure about. The user may not be at the venue, so publishing doesn't wait for their go-ahead (they chose this mode for exactly that reason) — but say clearly which values came from a hard-to-read photo so a wrong one can be corrected quickly.
+
+A photo too blurry to read reliably is not a reason to guess: publish what is certain, put "原本参照" for the unreadable value, and tell the user which value it was.
 
 ## Amendments to an already-registered flight — the user relays them, not WebFetch
 
