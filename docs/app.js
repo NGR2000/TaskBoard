@@ -690,7 +690,8 @@
   function header(title, sub, actions, back) {
     return '<div class="header">' +
       (back ? '<button class="btn-small" data-act="screen" data-screen="' + esc(back) + '">←</button>' : '') +
-      '<div class="header-title">' + esc(title) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
+      '<div class="header-title"><span class="header-name" title="' + esc(title) + '">' + esc(title) + '</span>' +
+      (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
       '<div class="header-actions">' + (actions || '') + '</div></div>';
   }
 
