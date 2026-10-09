@@ -13,6 +13,15 @@
 (function () {
   'use strict';
 
+  // GoalView 4D の地図の上に埋め込まれているとき（iframe の中）は、狭い枠に収まるよう
+  // 文字を詰めた表示にする（styles.css の html.embedded）。単独で開いたときは従来どおり、
+  // チェイスカーの中でも読みやすい大きめの文字のまま。
+  try {
+    if (window.self !== window.top) document.documentElement.classList.add('embedded');
+  } catch (e) {
+    document.documentElement.classList.add('embedded'); // 別サーバーの親は参照できない＝埋め込まれている
+  }
+
   var APP_VERSION = '4.0.0';
   var LS = {
     flightsIndex: 'tb.flights.index',

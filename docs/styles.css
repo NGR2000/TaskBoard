@@ -302,3 +302,17 @@ input:focus, textarea:focus { border-color: #1a1a1a; }
   .label-en { color: #7a7a7a; }
   .flight-chip.archive { color: #9a9a9a; }
 }
+
+/* ---------- GoalView 4D に埋め込まれたとき（app.js が html に embedded を付ける） ----------
+   地図の上の狭いシート・小窓に収まるよう、大きい文字を大会名の見出し（13px）程度に揃える。
+   単独で開いたときは上の大きめの文字のまま（チェイスカーの中で読む前提）。 */
+html.embedded .card-header h2 { font-size: 13px; }
+html.embedded .task-no { font-size: 13px; padding: 2px 8px; }
+html.embedded .task-id { font-size: 13px; }
+html.embedded .task-name-ja { font-size: 13px; }
+html.embedded .task-name-en { font-size: 10px; }
+html.embedded .value-ja { font-size: 13px; }
+html.embedded .value-en { font-size: 10px; }
+/* 項目名が値より大きくならないように */
+html.embedded .label-ja { font-size: 12px; }
+html.embedded .label-en { font-size: 9.5px; }
