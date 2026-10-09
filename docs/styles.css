@@ -316,3 +316,10 @@ html.embedded .value-en { font-size: 10px; }
 /* 項目名が値より大きくならないように */
 html.embedded .label-ja { font-size: 12px; }
 html.embedded .label-en { font-size: 9.5px; }
+/* 座標はタップすると GoalView 4D の地図がその位置へ動く（埋め込み時だけ、app.js の targetCoordHtml） */
+html.embedded .target-coord.map-link {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+html.embedded .target-coord.map-link::after { content: ' 🗺'; font-size: 0.8em; }
