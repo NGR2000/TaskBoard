@@ -79,7 +79,7 @@ A sheet registered only to test something should not stay in the crew's flight b
 
 ## Step 6 — Sketches and diagrams
 
-Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the A/B quadrant circle of an MDD, a satellite-map crop, a crew's terrain sketch) are stored per **flight + task** and shown as a "📎 スケッチ / 見る" button on that task.
+Sketches (per-task drawings: an MMA shape when the sheet says `MMA: sketch`, the A/B quadrant circle of an MDD, a satellite-map crop, a crew's terrain sketch, a photo printed on the sheet such as the hare balloon in a Hare and Hounds task) are stored per **flight + task** and shown as a "📎 スケッチ / 見る" button on that task.
 
 1. Produce the image. A hand-drawn sheet photo is used as-is. A diagram embedded in a PDF is cropped at high zoom:
    ```python
