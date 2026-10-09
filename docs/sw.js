@@ -11,7 +11,7 @@
  *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v4.1.4';
+var CACHE_VERSION = 'taskboard-v4.1.5';
 var IMAGE_CACHE = 'taskboard-images'; // app.js と同じ名前
 var IMAGE_PATH = '/storage/v1/object/public/taskboard/';
 var IMAGE_CACHE_MAX = 400; // これを超えたら古いものから消す（1大会で数十枚程度）
@@ -37,11 +37,20 @@ self.addEventListener('install', function (event) {
   );
 });
 
+/*
+ * 古い版のキャッシュを消す。自分の名前（taskboard-）で始まるものだけを対象にすること。
+ * GoalView 4D は同じサーバーの /taskboard/ に TaskBoard を置いて地図の上に埋め込む。
+ * キャッシュはサーバー（オリジン）ごとに共有なので、名前を問わず消すと
+ * GoalView 4D 側のオフライン用キャッシュ（地図アプリ本体）まで消してしまう。
+ */
+var OWN_CACHE_PREFIX = 'taskboard-';
+
 self.addEventListener('activate', function (event) {
   event.waitUntil(
     caches.keys()
       .then(function (keys) {
         return Promise.all(keys.map(function (k) {
+          if (k.indexOf(OWN_CACHE_PREFIX) !== 0) return null; // 他のアプリのキャッシュには触れない
           return k === CACHE_VERSION || k === IMAGE_CACHE ? null : caches.delete(k);
         }));
       })
