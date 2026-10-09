@@ -11,7 +11,7 @@
  *
  * ファイルを更新したら CACHE_VERSION を上げること。
  */
-var CACHE_VERSION = 'taskboard-v4.1.7';
+var CACHE_VERSION = 'taskboard-v4.1.8';
 var IMAGE_CACHE = 'taskboard-images'; // app.js と同じ名前
 var IMAGE_PATH = '/storage/v1/object/public/taskboard/';
 var IMAGE_CACHE_MAX = 400; // これを超えたら古いものから消す（1大会で数十枚程度）

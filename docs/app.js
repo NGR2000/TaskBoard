@@ -16,11 +16,10 @@
   // GoalView 4D の地図の上に埋め込まれているとき（iframe の中）は、狭い枠に収まるよう
   // 文字を詰めた表示にする（styles.css の html.embedded）。単独で開いたときは従来どおり、
   // チェイスカーの中でも読みやすい大きめの文字のまま。
-  try {
-    if (window.self !== window.top) document.documentElement.classList.add('embedded');
-  } catch (e) {
-    document.documentElement.classList.add('embedded'); // 別サーバーの親は参照できない＝埋め込まれている
-  }
+  var EMBEDDED = (function () {
+    try { return window.self !== window.top; } catch (e) { return true; } // 別サーバーの親は参照できない＝埋め込まれている
+  })();
+  if (EMBEDDED) document.documentElement.classList.add('embedded');
 
   var APP_VERSION = '4.0.0';
   var LS = {
@@ -951,6 +950,18 @@
       '<span class="row-value">' + valueHtml + '</span></div>';
   }
 
+  /**
+   * ターゲットの座標。GoalView 4D に埋め込まれているときはタップできるようにし、
+   * タップされたら親（GoalView 4D）へ知らせて地図をその位置へ動かしてもらう。
+   */
+  function targetCoordHtml(task, t, name, color) {
+    if (!EMBEDDED) return '<span class="target-coord">' + esc(t.coordinates) + '</span>';
+    var taskLabel = 'T' + (task.taskNo || '') + (task.taskId ? ' ' + task.taskId : '');
+    return '<span class="target-coord map-link" role="button" tabindex="0" title="地図で見る" data-act="maptarget"' +
+      ' data-coord="' + esc(t.coordinates) + '" data-name="' + esc(name) + '" data-mma="' + esc(t.mma || '') + '"' +
+      ' data-task="' + esc(taskLabel) + '" data-color="' + esc(color) + '">' + esc(t.coordinates) + '</span>';
+  }
+
   function renderTargets(task) {
     if (!task.targets.length) return '';
     var multi = task.targets.length > 1;
@@ -965,7 +976,7 @@
         '<div class="target-head">' +
           (multi || nameJa ? '<span class="target-name" style="color:' + esc(color) + '">● ' +
             esc(nameJa || ('Target ' + (i + 1))) + '</span>' : '') +
-          (t.coordinates ? '<span class="target-coord">' + esc(t.coordinates) + '</span>' : '') +
+          (t.coordinates ? targetCoordHtml(task, t, nameJa || ('Target ' + (i + 1)), V.color || '') : '') +
         '</div>' +
         (t.mma ? '<div class="target-mma">MMA ' + esc(lookupValue(t.mma).ja) + ' <span class="target-sub">マーカー計測エリア</span></div>' : '') +
         (t.altitude ? '<div class="target-sub">高度 / Altitude: ' + esc(t.altitude) + '</div>' : '') +
@@ -1247,6 +1258,15 @@
   // =======================================================================
   // 操作
   // =======================================================================
+  // タップできる座標（role="button"）は、キーボードの Enter・Space でも押せるように
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var node = ev.target.closest ? ev.target.closest('[data-act="maptarget"]') : null;
+    if (!node) return;
+    ev.preventDefault();
+    node.click();
+  });
+
   document.addEventListener('click', function (ev) {
     var node = ev.target.closest ? ev.target.closest('[data-act]') : null;
     if (!node) return;
@@ -1260,6 +1280,21 @@
     ev.preventDefault();
 
     switch (act) {
+      case 'maptarget': {
+        // GoalView 4D（親）へ「この座標を地図に出して」と知らせる。中身は公開のタスクシートの
+        // 内容なので宛先は限定しない（同じサーバー・TaskBoardの公開サイトのどちらに埋め込まれても届く）
+        if (EMBEDDED && window.parent) {
+          window.parent.postMessage({
+            source: 'taskboard', type: 'show-target',
+            coordinates: node.getAttribute('data-coord') || '',
+            name: node.getAttribute('data-name') || '',
+            mma: node.getAttribute('data-mma') || '',
+            task: node.getAttribute('data-task') || '',
+            color: node.getAttribute('data-color') || ''
+          }, '*');
+        }
+        break;
+      }
       case 'toggle': {
         var key = node.getAttribute('data-key');
         state.open[key] = key === 'basic' ? !state.open[key] : (state.open[key] === false);
