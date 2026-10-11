@@ -1,6 +1,6 @@
 ---
 name: taskboard-watch
-description: Watches a competition's watchmefly.net (or similar) event page on a schedule for a task sheet that hasn't been published yet, and separately handles applying a briefing-announced change (cancellation, correction) to a flight already registered in TaskBoard once the user relays it. Use this whenever the user asks to monitor/watch/poll an event page for a task sheet ("監視して", "見張って", "アップされたら教えて/反映して", "ブリーフィングが○時なので○時から確認して"), or tells you about a cancellation/correction from a briefing that needs to be applied to a flight already in TaskBoard ("キャンセルになった", "修正が入った", "変更があった").
+description: Watches a competition's watchmefly.net (or similar) event page on a schedule for a task sheet that hasn't been published yet, and separately handles applying a briefing-announced change (cancellation, correction) to a flight already registered in TaskBoard once the user relays it. Use this whenever the user asks to monitor/watch/poll an event page for a task sheet ("監視して", "見張って", "アップされたら教えて/反映して", "ブリーフィングが○時なので○時から確認して"), or tells you about a cancellation/correction from a briefing that needs to be applied to a flight already in TaskBoard ("キャンセルになった", "修正が入った", "変更があった", "今日のフライトはキャンセル"). Also use it to plan and run an event whose task sheets are paper only, where a member at the venue uploads photos through the admin page and the user may not be there ("watchmeflyに上がらない大会", "私は参加できない", "現地のメンバーが写真で上げる"). It covers the push converter, the backup watch triggers, the checks in each window, and the cleanup afterwards.
 ---
 
 # TaskBoard: watch for a task sheet, and for changes to one already registered
@@ -80,6 +80,26 @@ The loop is the same shape as Steps 1–4 — a cron trigger opens the window, t
 
 A photo too blurry to read reliably is not a reason to guess: publish what is certain, put "原本参照" for the unreadable value, and tell the user which value it was.
 
+### Running a paper-only event from start to finish
+
+This is how the 一関 2026 event (3 days, AM/PM flights, user not at the venue) actually ran. Reuse it as the default plan.
+
+**Before the event**
+- The member at the venue has an admin login (Supabase Auth user + a row in `admins`) and the copy-paste instructions for「📷 写真だけで速報登録」: task-sheet pages first, then any sketch/map pages, all in one upload.
+- The **push converter** does the real work: after a photo-only upload, the admin page calls the keep-alive Worker's `/notify`, which fires the "TaskBoard 変換係" Claude Code routine. A fresh session converts and publishes within about a minute, sketches included. Its rules live in that routine's prompt (and in this skill once merged), so when the conversion rules change, update **both** the routine prompt (`update_trigger`) and the skill.
+- The **pull watch** in this session is only a backup. Make one cron trigger per briefing window (e.g. 5:25 JST for a 5:30 briefing, and 13:55 JST for 14:00), bound to this session, each pointing at the 1-minute `send_later` loop above with a cutoff about 30 minutes after take-off. Limit the cron to the event's dates. Also make a one-shot cleanup trigger for the day after the last window that deletes those triggers. Otherwise a `day month` cron fires again next year.
+
+**Each window**
+- `pending` empty is the normal case: the push converter got there first. Once per window, run `taskboard_state.py list` to confirm the new flight exists with tasks. Then open its original (`Client().download(images[0])`) and check that nothing that should be a sketch was missed: a sketch page, a map, or a photo in a task box. Spot-check the coordinates against the photo. If something is missing, attach it with `publish.py --key <key> --sketch N:img`. That changes only the sketch; tasks, label and originals stay as they are.
+- Keep each report to one line ("HH:MM 変換待ちなし、次は HH:MM"). Report in full only when you converted, fixed or found something.
+
+**When the user relays a change** (cancellation, correction), follow the next section. A whole flight called off at the briefing is the most common case.
+
+**After the event**
+- Delete the watch triggers (or let the cleanup trigger do it). Check that `pending` is empty, then tell the user.
+- Leave the push converter routine in place for the next event. Offer to archive the event's flights; don't archive them unasked, because the crew may still be looking at them.
+- Lessons from the event (like the hare-balloon photo crop) go into this skill and the routine prompt in the same change.
+
 ## Amendments to an already-registered flight — the user relays them, not WebFetch
 
 Cancellations and corrections that land after a flight is already registered turn out to come from **verbal briefings and supplementary briefings** at the venue, not from a timestamped, machine-readable status on watchmefly.net. This was learned the hard way on the Slovak Balloon Cup watch: watchmefly's noticeboard only ever showed a *date* for a cancellation announcement, never a time, and there was no way to tell from the page alone when (or even whether) a briefing-announced change would show up there at all. Don't design around WebFetch reliably catching an amendment — it won't, and asserting a specific announcement time you didn't actually observe is worse than not asserting one (this happened once already; see the correction lesson below).
@@ -97,7 +117,7 @@ This is the concrete two-part deliverable the user asked for — not just patchi
 1. Fetch the flight's currently-registered JSON (`taskboard_state.py show <key> /abs/current.json`) so you're patching the real live content, not a stale local copy.
 2. **If `basicInfo.changeNotice` is already set from a previous amendment**, move it (and its Ja twin) into `basicInfo.changeHistory` as a new entry *before* overwriting it with the new one — that's what keeps the log growing instead of clobbering the previous change. If `changeHistory` doesn't exist yet, start it with the previous notice as its first entry (skip this if there was no previous notice — nothing to preserve).
 3. Set the new current `basicInfo.changeNotice` / `changeNoticeJa` to describe the latest change (this is what shows as the always-visible red banner). Use whatever time granularity the user actually gave you for `at` in the history entry — a bare date, "ブリーフィングにて", "補足ブリーフィングにて" — never a specific clock time unless the user stated one. See README.md's "ブリーフィング後の変更" section for the exact shape of `changeHistory` entries (`{at, notice, noticeJa}`).
-4. Apply the task-level fields for the new change: `cancelled: true` for a cancellation, or `changeNote` / `changeNoteJa` for a correction that isn't a full cancellation, plus `changed: true` on any specific `fields[]` entry the user identifies as corrected. Leave `cancelled`/`changeNote` from *previous, already-applied* amendments as they are — those tasks stay flagged; only the history log needs the new entry, not a rewrite of old task states.
+4. Apply the task-level fields for the new change. Use `cancelled: true` for a cancellation. **When the whole flight is cancelled** ("今日の朝のフライトはキャンセル"), set `cancelled: true` on every task in that flight. Name the tasks in the banner, e.g. `changeNoticeJa: "10/11 朝のフライトはキャンセルになりました（Task 12・Task 13）"` / `changeNotice: "Flight cancelled (Task 12 and Task 13), 10/11"`. Keep the flight live rather than archiving it: the crew should see the red banner and greyed-out cards, not a flight that vanished. If the user only says "the morning flight", match it to the flight by date + AM/PM in `taskboard_state.py list`, and say which flight you changed. For a correction that isn't a full cancellation, use `changeNote` / `changeNoteJa`, plus `changed: true` on any specific `fields[]` entry the user identifies as corrected. Leave `cancelled`/`changeNote` from *previous, already-applied* amendments as they are — those tasks stay flagged; only the history log needs the new entry, not a rewrite of old task states.
 5. Preview the patched JSON with `taskboard-publish/scripts/preview.js` — confirm the banner, the collapsed history entry, the grayed-out card, or the amber warning actually render before publishing.
 6. Republish with `tools/publish.py --key <same key> --json <patched JSON>` — same key, overwrite in place. Leaving out `--label` keeps the hand-chosen name; pass `--label` only when the user asked to rename it.
 7. Verify with `taskboard_state.py list` and report back what changed and what the history now shows — worth a real message, not a quiet line.
