@@ -53,6 +53,11 @@ do $$ declare t timestamptz; begin
   raise notice 'OK  中身の更新で updated_at が進む';
 end $$;
 do $$ begin if (select count(*) from public.history) <> 0 then raise notice 'OK  管理者は履歴を読める'; else raise exception 'NG 履歴が読めない'; end if; end $$;
+do $$ begin
+  if not public.is_admin() then raise exception 'NG 管理者の rpc(is_admin) が true にならない'; end if;
+  if (select count(*) from public.admins) <> 1 then raise exception 'NG 管理者がメンバー一覧を読めない'; end if;
+  raise notice 'OK  管理者は is_admin を呼べて、メンバー一覧を読める';
+end $$;
 reset role;
 
 -- 匿名は読める・履歴は読めない
@@ -72,6 +77,18 @@ do $$ begin
   end;
   raise notice 'OK  匿名に履歴は見えない';
 end $$;
+-- GV4D のブリッジが anon キーで叩いているのと同じ読み方
+do $$ declare n int; d jsonb; begin
+  select count(*) into n from (
+    select key, label, date, archived_at, updated_at, task_count, competition_name
+    from public.flight_list order by created_at asc, key asc) q;
+  if n <> 1 then raise exception 'NG GV4D の一覧の読み方で読めない'; end if;
+  select data into d from public.flights where key = 'f1';
+  if jsonb_typeof(d -> 'tasks') <> 'array' then raise exception 'NG GV4D がフライト1件を読めない'; end if;
+  raise notice 'OK  匿名は GV4D と同じ読み方で flight_list と flights を読める';
+end $$;
+select pg_temp.expect_denied($$select public.is_admin()$$, '匿名は is_admin を呼べない');
+select pg_temp.expect_denied($$insert into public.sketches (flight_key, task_no, path) values ('f1', '9', 'x')$$, '匿名はスケッチを登録できない');
 select pg_temp.expect_denied($$update public.flights set label = 'hacked'$$, '匿名は書き換えられない');
 select pg_temp.expect_denied($$delete from public.flights$$, '匿名は削除できない');
 reset role;
@@ -87,4 +104,25 @@ do $$ begin
      <> 'flights:INSERT:admin@example.com,sketches:INSERT:admin@example.com,flights:UPDATE:admin@example.com,flights:UPDATE:admin@example.com,flights:DELETE:admin@example.com,sketches:DELETE:admin@example.com'
   then raise exception 'NG 履歴: %', (select string_agg(table_name || ':' || op || ':' || coalesce(actor,'-'), ',' order by id) from public.history); end if;
   raise notice 'OK  履歴に誰が何をしたかが残る（削除前の中身も old_row に残る）';
+end $$;
+
+-- public のテーブル・ビューには、すべて明示的な GRANT と（テーブルなら）RLS があること。
+-- 2026/10/30 以降の Supabase は新しいテーブルを自動では API に公開しないので、
+-- GRANT を書き忘れたテーブルを足すと、本番ではそのテーブルだけ "permission denied" になる
+do $$ declare r record; bad text := ''; begin
+  for r in
+    select c.relname, c.relkind, c.relrowsecurity
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
+  loop
+    if not (has_table_privilege('anon', 'public.' || quote_ident(r.relname), 'select')
+            or has_table_privilege('authenticated', 'public.' || quote_ident(r.relname), 'select')) then
+      bad := bad || ' ' || r.relname || '(GRANT なし)';
+    end if;
+    if r.relkind in ('r', 'p') and not r.relrowsecurity then
+      bad := bad || ' ' || r.relname || '(RLS なし)';
+    end if;
+  end loop;
+  if bad <> '' then raise exception 'NG 公開設定の足りないテーブル:%', bad; end if;
+  raise notice 'OK  public のテーブル・ビューはすべて GRANT と RLS が明示されている';
 end $$;

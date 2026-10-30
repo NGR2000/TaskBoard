@@ -8,6 +8,18 @@
 --   読み取り … 誰でも可（クルー用アプリはログインしない。今の GAS と同じく公開）
 --   書き込み … ログインしていて、かつ admins 表にメールがある人だけ
 -- メンバーの追加は README.md「メンバーの追加」を参照。
+--
+-- API への公開（GRANT）について:
+--   Supabase は 2026/5/30 以降の新規プロジェクトで、既存プロジェクトでも 2026/10/30 以降に
+--   public に新しく作ったテーブルを、自動では Data API（supabase-js・PostgREST）に公開しない。
+--   GRANT が無いと API からは "permission denied" になる。新しいプロジェクトやテーブルの
+--   作り直しでも同じ。そこで、テーブル・ビュー・関数を作るたびに、その直後で
+--   必要な分だけ明示的に GRANT する。
+--   GRANT は API の入口を開けるだけ。誰が何をできるかは、これまでどおり下の RLS で決める。
+--   テーブルを足す時は、create の直後に「alter table ... enable row level security」と
+--   GRANT を書くこと（supabase/test/rls_test.sql が、GRANT の無いテーブルを見つけると失敗する）。
+
+grant usage on schema public to anon, authenticated;
 
 -- =====================================================================
 -- 管理者（書き込みできるメンバー）
@@ -17,6 +29,9 @@ create table if not exists public.admins (
   note     text,
   added_at timestamptz not null default now()
 );
+alter table public.admins enable row level security;
+-- 管理画面のメンバー一覧が読む（RLS で管理者だけ）。追加・削除は SQL Editor / Table Editor から
+grant select on table public.admins to authenticated;
 
 -- RLS の中で admins を引くための関数。security definer にしてあるので、
 -- admins 表そのものは匿名ユーザーから見えないままにできる。
@@ -30,6 +45,10 @@ as $$
     where email = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
 $$;
+-- 管理画面（ログイン後）と Worker の /notify が rpc('is_admin') で呼ぶ。RLS の判定でも使う。
+-- 関数は既定で誰でも実行できるので、それを外してログインした人だけにする
+revoke execute on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
 
 -- =====================================================================
 -- フライト（タスクデータシート1枚ぶん）
@@ -48,6 +67,10 @@ create table if not exists public.flights (
   created_at  timestamptz not null default now(),  -- 登録順。一覧の並びに使う
   updated_at  timestamptz not null default now()   -- クルー端末のキャッシュ判定に使う
 );
+alter table public.flights enable row level security;
+-- 読み取り: クルー用アプリ・GV4D・Worker（anon キー）。書き込み: 管理画面・publish.py（RLS で管理者だけ）
+grant select on table public.flights to anon, authenticated;
+grant insert, update, delete on table public.flights to authenticated;
 
 -- =====================================================================
 -- タスク別スケッチ
@@ -60,6 +83,10 @@ create table if not exists public.sketches (
   updated_at timestamptz not null default now(),
   primary key (flight_key, task_no)
 );
+alter table public.sketches enable row level security;
+-- 読み取り: クルー用アプリ・Worker（anon キー）。書き込み: 管理画面・publish.py（RLS で管理者だけ）
+grant select on table public.sketches to anon, authenticated;
+grant insert, update, delete on table public.sketches to authenticated;
 
 -- 中身が変わった時だけ updated_at を進める。クルー端末はこれを見て
 -- 「更新あり」を出し、フライトを取り直すため。アーカイブや登録順の変更は
@@ -101,6 +128,10 @@ create table if not exists public.history (
   new_row    jsonb
 );
 create index if not exists history_row_key_idx on public.history (row_key, at desc);
+alter table public.history enable row level security;
+-- 管理画面の変更履歴が読む（RLS で管理者だけ）。書き込みはトリガー（security definer）だけなので
+-- insert などの権限は付けない
+grant select on table public.history to authenticated;
 
 create or replace function public.record_history()
 returns trigger
@@ -154,14 +185,14 @@ select
   coalesce(jsonb_array_length(data -> 'tasks'), 0)             as task_count,
   coalesce(data -> 'basicInfo' ->> 'competitionName', '')      as competition_name
 from public.flights;
+-- security_invoker なので、読む人に flights の select 権限と RLS がそのまま効く。
+-- クルー用アプリと GV4D（anon キー）が一覧に使う。列名を変える時は GV4D にも知らせる
+grant select on table public.flight_list to anon, authenticated;
 
 -- =====================================================================
 -- 行レベルの権限（RLS）
 -- =====================================================================
-alter table public.admins   enable row level security;
-alter table public.flights  enable row level security;
-alter table public.sketches enable row level security;
-alter table public.history  enable row level security;
+-- 各テーブルの RLS は create の直後で有効にしてある。ここではポリシーだけを置く。
 
 drop policy if exists "admins: admins read" on public.admins;
 create policy "admins: admins read" on public.admins
@@ -186,19 +217,6 @@ drop policy if exists "history: admins read" on public.history;
 create policy "history: admins read" on public.history
   for select to authenticated using (public.is_admin());
 -- history への書き込みはトリガーだけ（security definer）。直接の書き込み・改ざんはできない
-
--- =====================================================================
--- テーブルの公開（GRANT）
--- =====================================================================
--- 2026年5月30日以降に作った Supabase プロジェクトは、public のテーブルを
--- 自動では API に公開しない。RLS とは別に、ここで明示的に許可する
--- （古いプロジェクトでは既に付いているので、流し直しても害は無い）。
-grant usage on schema public to anon, authenticated;
-grant select on public.flights, public.sketches to anon, authenticated;
-grant insert, update, delete on public.flights, public.sketches to authenticated;
-grant select on public.history, public.admins to authenticated;
-grant select on public.flight_list to anon, authenticated;
-grant execute on function public.is_admin() to anon, authenticated;
 
 -- =====================================================================
 -- 画像の置き場所（Storage）
