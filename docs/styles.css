@@ -277,6 +277,28 @@ input:focus, textarea:focus { border-color: #1a1a1a; }
 .howto { background: var(--panel); border-radius: 10px; padding: 14px; font-size: 13px; color: #444; line-height: 1.9; }
 .howto b { display: block; margin-bottom: 3px; color: var(--fg); }
 
+/* ---------- battery reminder（BLS・iPhone のバッテリー確認） ---------- */
+.battery-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; margin-bottom: 12px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); }
+.battery-main { min-width: 0; }
+.battery-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+.battery-body { font-size: 14px; margin-top: 2px; }
+.battery-count { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.battery-sub { font-size: 12px; color: var(--muted); }
+.battery-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.battery-go { background: var(--ok); }
+.battery-due { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+.battery-due .battery-title { color: var(--danger); }
+.battery-done .battery-body { color: var(--ok); }
+.battery-time { font-size: 16px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.battery-alert { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.6); }
+.battery-alert-box { width: 100%; max-width: 360px; padding: 22px 18px; border-radius: 16px; text-align: center; background: var(--bg); color: var(--fg); border: 3px solid var(--danger); }
+.battery-alert-icon { font-size: 48px; line-height: 1; }
+.battery-alert-title { font-size: 22px; font-weight: 800; margin: 8px 0; color: var(--danger); }
+.battery-alert-text { font-size: 15px; line-height: 1.7; margin-bottom: 16px; }
+.battery-alert-ok, .battery-alert-later { display: block; width: 100%; padding: 13px; border: none; border-radius: 10px; font-size: 16px; font-weight: 800; }
+.battery-alert-ok { background: var(--danger); color: #fff; }
+.battery-alert-later { margin-top: 8px; background: var(--panel); color: var(--fg); font-size: 14px; }
+
 /* ---------- dark mode ---------- */
 @media (prefers-color-scheme: dark) {
   :root {
