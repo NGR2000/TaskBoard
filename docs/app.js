@@ -1110,7 +1110,8 @@
       buttons = '<button class="btn-small" data-act="battery-save">保存</button>' +
         '<button class="btn-small" data-act="battery-edit-cancel">やめる</button>';
     } else if (st.phase === 'idle') {
-      body = '離陸から' + BATTERY_MINUTES + '分後に知らせます';
+      body = '離陸したら押してください。押した時刻から' + BATTERY_MINUTES + '分後に知らせます' +
+        '<div class="battery-note">※ 押した時刻を離陸時刻として扱います。押すのは離陸の後なので、実際の離陸時刻より少し遅れます。</div>';
       buttons = '<button class="btn-small battery-go" data-act="battery-takeoff">🎈 離陸</button>';
     } else if (st.phase === 'done') {
       body = '✅ 確認済み（' + hhmm(st.rec.ack) + '）';
@@ -1121,8 +1122,10 @@
     } else {
       body = '<span class="battery-count" id="battery-count">' + countdown(st.next - Date.now()) + '</span>' +
         ' <span class="battery-sub">（' + (st.next > st.due ? 'もう一度 ' + hhmm(st.next) : hhmm(st.due)) + '・' +
-        (st.provisional ? '仮: 離陸時間帯の終わり ' + hhmm(st.base) + ' から' : '離陸 ' + hhmm(st.base) + ' から') +
-        BATTERY_MINUTES + '分）</span>';
+        (st.provisional ? '仮: 離陸時間帯の終わり ' + hhmm(st.base) + ' から' : '離陸ボタン ' + hhmm(st.base) + ' から') +
+        BATTERY_MINUTES + '分）</span>' +
+        (st.provisional ? ''
+          : '<div class="battery-note">※ 離陸時刻はボタンを押した時刻です。実際の離陸より遅れるので、ずれが大きい時は「直す」で直してください。</div>');
       buttons = st.provisional
         ? '<button class="btn-small battery-go" data-act="battery-takeoff">🎈 離陸</button>'
         : '<button class="btn-small" data-act="battery-edit">直す</button>' +
@@ -1182,7 +1185,7 @@
     node.innerHTML = '<div class="battery-alert-box">' +
       '<div class="battery-alert-icon">🔋</div>' +
       '<div class="battery-alert-title">バッテリー確認</div>' +
-      '<div class="battery-alert-text">離陸から' + BATTERY_MINUTES + '分です。<br>パイロットに <b>BLS</b> と <b>iPhone</b> のバッテリー確認を伝えてください。</div>' +
+      '<div class="battery-alert-text">離陸から約' + BATTERY_MINUTES + '分です。<br>パイロットに <b>BLS</b> と <b>iPhone</b> のバッテリー確認を伝えてください。</div>' +
       '<button class="battery-alert-ok" data-act="battery-ack">確認した</button>' +
       '<button class="battery-alert-later" data-act="battery-snooze">' + BATTERY_SNOOZE_MIN + '分後にもう一度</button>' +
       '</div>';
