@@ -28,7 +28,8 @@
     sketchIdx: 'tb.sketches',
     lastSync: 'tb.lastSync',
     flightPrefix: 'tb.flight.',      // + key  -> { data, updatedAt }
-    lastViewedPrefix: 'tb.lastViewed.' // + key -> ISO timestamp
+    lastViewedPrefix: 'tb.lastViewed.', // + key -> ISO timestamp
+    batteryPrefix: 'tb.battery.'      // + key -> { takeoff, ack, snooze }（ミリ秒）
   };
   // 原本・スケッチの画像は localStorage ではなく Service Worker のキャッシュに置く（sw.js）
   var IMAGE_CACHE = 'taskboard-images';
@@ -692,7 +693,10 @@
     app.innerHTML = html;
     renderModal();
     var entry = state.flightData[state.activeFlight];
-    if (state.screen === 'view' && entry && entry.data) startTimers(entry.data.tasks);
+    if (state.screen === 'view' && entry && entry.data) {
+      startTimers(entry.data.tasks);
+      startBattery(entry.data);
+    }
   }
 
   function header(title, sub, actions, back) {
@@ -786,6 +790,7 @@
       html += '<div class="spacer"></div></div>';
       return html;
     }
+    html += renderBatteryBar(d);
     html += renderBasic(d.basicInfo);
     html += d.tasks.map(renderTask).join('');
     html += '<div class="spacer"></div></div>';
@@ -1012,6 +1017,223 @@
     }
     return '<div class="attach"><span>📎 スケッチ / Sketch</span>' +
       '<button class="btn-small" data-act="sketch" data-taskno="' + esc(no) + '">見る</button></div>';
+  }
+
+  // ---------- バッテリー確認（BLS・iPhone） ----------
+  // パイロットの要望: 離陸からおよそ1時間で BLS と iPhone のバッテリーを確認するよう知らせる。
+  // 追跡車のクルーの端末で知らせ、クルーが無線で伝える運用（アプリを開いている間だけ鳴る）。
+  // 基準は「離陸」ボタンを押した時刻。押していない時は、その日のタスクシートの
+  // 離陸時間帯（Launch Period）の終わりを仮の基準にする。知らせるのは1回だけ。
+  // 記録は端末ごと・フライトごとに localStorage に置く（サーバーは使わない）。
+  var BATTERY_MINUTES = 60;
+  var BATTERY_SNOOZE_MIN = 5;
+  var BATTERY_STALE_MS = 6 * 3600 * 1000; // これより古い離陸記録・仮の基準は無視する（前日の分など）
+  var battery = { audio: null, wake: null, phase: '', lastBeep: 0, editing: false };
+
+  function batteryLoad(key) {
+    try { return JSON.parse(safeGet(LS.batteryPrefix + key) || 'null') || {}; } catch (e) { return {}; }
+  }
+  function batterySave(key, rec) { safeSet(LS.batteryPrefix + key, JSON.stringify(rec || {})); }
+
+  /** タスクシートの日付が今日か（年・月・日まで読めた時だけ true） */
+  function flightIsToday(text) {
+    var nums = String(text || '').match(/\d+/g);
+    if (!nums || nums.length < 3) return false;
+    var y, m, d;
+    if (nums[0].length === 4) { y = +nums[0]; m = +nums[1]; d = +nums[2]; }
+    else if (nums[2].length === 4) { d = +nums[0]; m = +nums[1]; y = +nums[2]; }
+    else return false;
+    var now = new Date();
+    return now.getFullYear() === y && now.getMonth() + 1 === m && now.getDate() === d;
+  }
+
+  /** 離陸時間帯（例 "7:00-7:40"）の終わりの時刻。今日のフライトでなければ null */
+  function launchPeriodEnd(data) {
+    var info = data.basicInfo;
+    if (!flightIsToday(info.date)) return null;
+    var f = info.fields.filter(function (x) { return normKey(x.label).indexOf('launchperiod') >= 0; })[0];
+    if (!f) return null;
+    var times = String(f.value).match(/\d{1,2}\s*[:：]\s*\d{2}/g);
+    var hm = times && parseHHMM(times[times.length - 1]);
+    if (!hm) return null;
+    var t = new Date();
+    t.setHours(hm.h, hm.m, 0, 0);
+    return t.getTime();
+  }
+
+  function allCancelled(data) {
+    return data.tasks.length > 0 && data.tasks.every(function (t) { return t.cancelled; });
+  }
+
+  /** 今の状態。phase: idle（基準なし）/ wait（待ち）/ due（確認の時間）/ done（確認済み）/ off（表示しない） */
+  function batteryStatus(data) {
+    var key = state.activeFlight;
+    if (!key || allCancelled(data)) return { phase: 'off' };
+    var rec = batteryLoad(key);
+    var now = Date.now();
+    var base = null, provisional = false;
+    if (rec.takeoff && now - rec.takeoff < BATTERY_STALE_MS) base = rec.takeoff;
+    else {
+      var end = launchPeriodEnd(data);
+      // 仮の基準は、知らせる時刻を30分以上過ぎたら使わない（午前のフライトを昼に開いて鳴らないように）
+      if (end !== null && now - (end + BATTERY_MINUTES * 60000) < 30 * 60000) { base = end; provisional = true; }
+    }
+    if (rec.ack && base !== null && rec.ack >= base) return { phase: 'done', rec: rec, base: base, provisional: provisional };
+    if (base === null) return { phase: 'idle', rec: rec };
+    var due = base + BATTERY_MINUTES * 60000;
+    var snoozed = rec.snooze && now < rec.snooze;
+    var phase = now >= due && !snoozed ? 'due' : 'wait';
+    var next = snoozed ? Math.max(due, rec.snooze) : due; // 「5分後にもう一度」の時はそこまで数える
+    return { phase: phase, rec: rec, base: base, due: due, next: next, provisional: provisional };
+  }
+
+  function hhmm(ms) {
+    var d = new Date(ms);
+    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function countdown(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h > 0 ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(x).padStart(2, '0');
+  }
+
+  function renderBatteryBar(data) {
+    var st = batteryStatus(data);
+    battery.phase = st.phase;
+    if (st.phase === 'off') return '';
+    var title = '🔋 BLS・iPhone バッテリー確認';
+    var body, buttons;
+    if (battery.editing) {
+      var v = st.rec && st.rec.takeoff ? new Date(st.rec.takeoff) : new Date();
+      var val = String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0');
+      body = '離陸時刻 <input type="time" id="battery-time" class="battery-time" value="' + val + '">';
+      buttons = '<button class="btn-small" data-act="battery-save">保存</button>' +
+        '<button class="btn-small" data-act="battery-edit-cancel">やめる</button>';
+    } else if (st.phase === 'idle') {
+      body = '離陸したら押してください。押した時刻から' + BATTERY_MINUTES + '分後に知らせます' +
+        '<div class="battery-note">※ 押した時刻を離陸時刻として扱います。押すのは離陸の後なので、実際の離陸時刻より少し遅れます。</div>';
+      buttons = '<button class="btn-small battery-go" data-act="battery-takeoff">🎈 離陸</button>';
+    } else if (st.phase === 'done') {
+      body = '✅ 確認済み（' + hhmm(st.rec.ack) + '）';
+      buttons = '<button class="btn-small" data-act="battery-reset">やり直す</button>';
+    } else if (st.phase === 'due') {
+      body = '<b>BLS と iPhone のバッテリーを確認してください</b>';
+      buttons = '<button class="btn-small battery-go" data-act="battery-ack">確認した</button>';
+    } else {
+      body = '<span class="battery-count" id="battery-count">' + countdown(st.next - Date.now()) + '</span>' +
+        ' <span class="battery-sub">（' + (st.next > st.due ? 'もう一度 ' + hhmm(st.next) : hhmm(st.due)) + '・' +
+        (st.provisional ? '仮: 離陸時間帯の終わり ' + hhmm(st.base) + ' から' : '離陸ボタン ' + hhmm(st.base) + ' から') +
+        BATTERY_MINUTES + '分）</span>' +
+        (st.provisional ? ''
+          : '<div class="battery-note">※ 離陸時刻はボタンを押した時刻です。実際の離陸より遅れるので、ずれが大きい時は「直す」で直してください。</div>');
+      buttons = st.provisional
+        ? '<button class="btn-small battery-go" data-act="battery-takeoff">🎈 離陸</button>'
+        : '<button class="btn-small" data-act="battery-edit">直す</button>' +
+          '<button class="btn-small" data-act="battery-reset">取消</button>';
+    }
+    return '<div class="battery-bar battery-' + st.phase + '" id="battery-bar">' +
+      '<div class="battery-main"><div class="battery-title">' + title + '</div>' +
+      '<div class="battery-body">' + body + '</div></div>' +
+      '<div class="battery-actions">' + buttons + '</div></div>';
+  }
+
+  /** iPhone は音を出す前に、ボタンを押した流れで AudioContext を起こしておく必要がある */
+  function batteryUnlockAudio() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!battery.audio) battery.audio = new AC();
+      if (battery.audio.state === 'suspended') battery.audio.resume();
+    } catch (e) { /* 音が出せない端末は表示だけ */ }
+  }
+
+  function batteryBeep() {
+    try {
+      if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
+      var ctx = battery.audio;
+      if (!ctx) return;
+      [0, 0.35, 0.7].forEach(function (t) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.25);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
+      });
+    } catch (e) { /* noop */ }
+  }
+
+  /** 確認の時間が近づいたら画面が消えないようにする（対応端末のみ） */
+  function batteryWake(on) {
+    try {
+      if (on && !battery.wake && navigator.wakeLock) {
+        navigator.wakeLock.request('screen').then(function (w) { battery.wake = w; }).catch(function () {});
+      } else if (!on && battery.wake) {
+        battery.wake.release(); battery.wake = null;
+      }
+    } catch (e) { /* noop */ }
+  }
+
+  function batteryAlert(show) {
+    var node = el('battery-alert');
+    if (!show) { if (node) node.parentNode.removeChild(node); return; }
+    if (node) return;
+    node = document.createElement('div');
+    node.id = 'battery-alert';
+    node.className = 'battery-alert';
+    node.innerHTML = '<div class="battery-alert-box">' +
+      '<div class="battery-alert-icon">🔋</div>' +
+      '<div class="battery-alert-title">バッテリー確認</div>' +
+      '<div class="battery-alert-text">離陸から約' + BATTERY_MINUTES + '分です。<br>パイロットに <b>BLS</b> と <b>iPhone</b> のバッテリー確認を伝えてください。</div>' +
+      '<button class="battery-alert-ok" data-act="battery-ack">確認した</button>' +
+      '<button class="battery-alert-later" data-act="battery-snooze">' + BATTERY_SNOOZE_MIN + '分後にもう一度</button>' +
+      '</div>';
+    document.body.appendChild(node);
+  }
+
+  function startBattery(data) {
+    function tick() {
+      var st = batteryStatus(data);
+      if (st.phase !== battery.phase && !battery.editing) { render(); return; }
+      var due = st.phase === 'due';
+      batteryAlert(due);
+      batteryWake(due || (st.phase === 'wait' && st.next - Date.now() <= 5 * 60000));
+      if (due && Date.now() - battery.lastBeep > 30000) { battery.lastBeep = Date.now(); batteryBeep(); }
+      var c = el('battery-count');
+      if (c && st.phase === 'wait') c.textContent = countdown(st.next - Date.now());
+    }
+    tick();
+    timers.push(setInterval(tick, 1000));
+  }
+
+  function batteryAction(act) {
+    var key = state.activeFlight;
+    if (!key) return;
+    var rec = batteryLoad(key);
+    var now = Date.now();
+    batteryUnlockAudio();
+    if (act === 'battery-takeoff') { rec = { takeoff: now }; battery.editing = false; }
+    else if (act === 'battery-edit') { battery.editing = true; }
+    else if (act === 'battery-edit-cancel') { battery.editing = false; }
+    else if (act === 'battery-save') {
+      var input = el('battery-time');
+      var hm = input && parseHHMM(input.value);
+      if (hm) {
+        var t = new Date(); t.setHours(hm.h, hm.m, 0, 0);
+        if (t.getTime() - now > 3600000) t.setDate(t.getDate() - 1); // 日付をまたいだ入力
+        rec = { takeoff: t.getTime() };
+      }
+      battery.editing = false;
+    }
+    else if (act === 'battery-reset') { rec = {}; battery.editing = false; }
+    else if (act === 'battery-ack') { rec.ack = now; rec.snooze = null; }
+    else if (act === 'battery-snooze') { rec.snooze = now + BATTERY_SNOOZE_MIN * 60000; }
+    batterySave(key, rec);
+    battery.lastBeep = 0;
+    batteryAlert(false);
+    if (act === 'battery-ack' || act === 'battery-reset') batteryWake(false);
+    render();
   }
 
   // ---------- タイマー ----------
@@ -1278,6 +1500,8 @@
       state.modal = null; renderModal(); return;
     }
     ev.preventDefault();
+
+    if (act.indexOf('battery-') === 0) { batteryAction(act); return; }
 
     switch (act) {
       case 'maptarget': {
