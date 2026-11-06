@@ -62,6 +62,7 @@ select { width:100%; padding:10px 11px; border-radius:9px; border:2px solid #ccc
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="./game-export.js"></script><!-- 管理者向け: ゲーム用のタスクファイルへの書き出し -->
 </head>
 <body>
 <div class="header">
@@ -403,6 +404,7 @@ function renderFlights() {
             : '<button class="btn-secondary btn-inline" data-act="archive-flight" data-key="' + esc(f.key) + '">アーカイブ</button>') +
           '<button class="btn-danger-outline" data-act="delete-flight" data-key="' + esc(f.key) + '">削除</button>' +
           '<button class="btn-link" data-act="history" data-key="' + esc(f.key) + '">履歴</button>' +
+          (tasks.length ? '<button class="btn-link" data-act="export-game" data-key="' + esc(f.key) + '">ゲーム用に書き出す</button>' : '') +
           (f.data && f.data.awaitingConversion && NOTIFY_URL
             ? '<button class="btn-small" data-act="request-conversion" data-key="' + esc(f.key) + '">変換を依頼</button>' : '') +
         '</div>' +
@@ -800,6 +802,23 @@ function delSketch(flightKey, taskNo) {
 // ---------------------------------------------------------------------
 // 操作
 // ---------------------------------------------------------------------
+// 熱気球フライトゲーム用のタスクファイル(JSON)に書き出して保存する(管理者だけ。game-export.js)。
+// タスクシートの表記をそのまま渡し、グリッドの緯度経度への変換はゲームがする
+function exportGame(key) {
+  var f = flights.filter(function (x) { return x.key === key; })[0];
+  if (!f) return;
+  var file;
+  try { file = toGameTaskFile(f); } catch (e) { msg('jsonMsg', 'ゲーム用に書き出せませんでした: ' + esc(e.message), 'err'); return; }
+  var blob = new Blob([JSON.stringify(file, null, 2) + '\n'], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = gameFileName(f);
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  msg('jsonMsg', 'ゲーム用のタスクファイルを保存しました(' + esc(a.download) + ')。IGC と一緒にゲームで読み込めます', 'info');
+}
+
 document.addEventListener('click', function (ev) {
   var node = ev.target.closest ? ev.target.closest('[data-act]') : null;
   if (!node) return;
@@ -814,6 +833,7 @@ document.addEventListener('click', function (ev) {
       requestConversion(key).then(function (note) { msg('jsonMsg', note, 'info'); });
       break;
     case 'history': openHistory = openHistory === key ? '' : key; renderFlights(); break;
+    case 'export-game': exportGame(key); break;
     case 'load-version': loadVersion(Number(node.getAttribute('data-id'))); break;
     case 'delete-sketch': delSketch(node.getAttribute('data-flightkey'), node.getAttribute('data-taskno')); break;
     case 'pick-sketch': {

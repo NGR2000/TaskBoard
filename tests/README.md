@@ -6,6 +6,7 @@
 supabase/test/run.sh       # schema.sql をローカルの Postgres で検証（権限・変更履歴・updated_at）
 python3 tests/rls_check.py # 本番（docs/config.js の接続先）で権限が意図どおりか確かめる
 node tests/date_test.js    # タスクシート日付の解析（4形式）
+node tests/game_export_test.js # 管理者向け: ゲーム用のタスクファイルへの書き出し
 ```
 
 `supabase/test/run.sh` は PGHOST / PGPORT / PGUSER で接続先を指定する（スーパーユーザーで）。

@@ -213,6 +213,17 @@ python3 tools/publish.py --json flight.json --original tds.pdf --key worlds2026-
 
 ---
 
+### 管理者: ゲーム用に書き出す
+
+管理画面のフライト一覧で「ゲーム用に書き出す」を押すと、熱気球フライトゲーム(サポーター版)の
+**タスクファイル**(`<フライトのキー>-game-tasks.json`)が保存される。ゲームの IGC 再生で、IGC と一緒に読み込むと
+タスクのゴールが重なり、ブリーフィングのタスクシート(番号・JDG/FIN/PDG・ロガーマーカー)も作られる。
+
+- 変換は `docs/admin/game-export.js`(管理画面だけが読み込む。クルー画面には出さない)
+- タスクシートの表記をそのまま渡す。グリッド(`1653/8209`)は緯度経度に直さず、ゲームが IGC の離陸地点を基準に直す
+- 形の説明はゲームのリポジトリ `championship/TASK-FILE-FORMAT.md`(ゲーム側が公開フォーマットを持つ。TaskBoard の JSON の形を変えてもゲームには影響しない)
+- テスト: `node tests/game_export_test.js`
+
 ## 困った時
 
 | 症状 | 原因と対処 |
